@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:immunova/Screens/add_patient_page.dart';
+import 'package:immunova/Screens/covid19_vaccine_screen.dart';
+import 'package:immunova/Screens/dtap_vaccine_screen.dart';
+import 'package:immunova/Screens/influenza_vaccine_screen.dart';
+import 'package:immunova/Screens/polio_vaccine_screen.dart';
+import 'package:immunova/Screens/bcg_vaccine_screen.dart';
+import 'package:immunova/Screens/menacwy_vaccine_screen.dart';
+import 'package:immunova/Screens/hpv_vaccine_screen.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/setting_page.dart';
 
@@ -29,32 +36,37 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
         description: 'Protects against tetanus, diphtheria and pertussis.',
         doses: '5 DOSES',
         isRecommended: true,
+        routeName: 'dtap',
       ),
       VaccineInfo(
         name: 'Polio Vaccine(IPV)',
         description: 'Protects against poliomyelitis.',
         doses: '5 DOSES',
         isRecommended: true,
+        routeName: 'polio',
       ),
       VaccineInfo(
         name: 'BCG (Bacillus Calmette-Guérin)',
         description: 'Protects against severe forms of tuberculosis.',
         doses: '1 DOSE',
         isRecommended: true,
+        routeName: 'bcg',
       ),
     ],
     'Toddlers(1-3yrs)': [
       VaccineInfo(
-        name: 'MMR Vaccine',
+        name: 'Meningococcal Vaccine',
         description: 'Protects against measles, mumps, and rubella.',
         doses: '2 DOSES',
         isRecommended: true,
+        routeName: 'Meningococcal',
       ),
       VaccineInfo(
-        name: 'Varicella Vaccine',
+        name: 'Influenza Flu Vaccine',
         description: 'Protects against chickenpox.',
         doses: '2 DOSES',
         isRecommended: true,
+        routeName: 'hepititis',
       ),
     ],
     'Adolescents': [
@@ -63,12 +75,14 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
         description: 'Protects against human papillomavirus.',
         doses: '3 DOSES',
         isRecommended: true,
+        routeName: 'hpv',
       ),
       VaccineInfo(
-        name: 'Meningococcal Vaccine',
+        name: 'Covid-19 Vaccine',
         description: 'Protects against meningococcal disease.',
         doses: '2 DOSES',
         isRecommended: true,
+        routeName: 'meningococcal',
       ),
     ],
   };
@@ -112,7 +126,7 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
                   height: 50,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+                    padding: EdgeInsets.symmetric(horizontal: 40),
                     itemCount: categories.length,
                     itemBuilder: (context, index) {
                       return _buildCategoryTab(categories[index]);
@@ -135,10 +149,7 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
                 return Padding(
                   padding: EdgeInsets.only(bottom: 16),
                   child: _buildVaccineCard(vaccine, () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => SettingsPage()),
-                    );
+                    _navigateToVaccineScreen(vaccine.routeName);
                   }),
                 );
               },
@@ -148,6 +159,50 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
+  }
+
+  void _navigateToVaccineScreen(String routeName) {
+    Widget? targetScreen;
+
+    switch (routeName) {
+      case 'dtap':
+        targetScreen = DtapVaccineScreen();
+        break;
+      case 'polio':
+        targetScreen = PolioVaccineScreen();
+        break;
+      case 'bcg':
+        targetScreen = BcgVaccineScreen();
+        break;
+      case 'Meningococcal':
+        targetScreen = MenacwyVaccineScreen();
+        break;
+      case 'hepititis':
+        targetScreen = InfluenzaVaccineScreen();
+        break;
+      case 'hpv':
+        targetScreen = HpvVaccineScreen();
+        break;
+      case 'meningococcal':
+        targetScreen = CovidVaccineScreen();
+        break;
+      default:
+        // Fallback to a generic vaccine screen or show an error
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Screen for ${routeName} not yet implemented'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+    }
+
+    if (targetScreen != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => targetScreen!),
+      );
+    }
   }
 
   Widget _buildCategoryTab(String category) {
@@ -184,7 +239,7 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
 
   Widget _buildVaccineCard(VaccineInfo vaccine, VoidCallback onTap) {
     return GestureDetector(
-      onTap: onTap, // Replace with actual details page
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -302,6 +357,11 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
                     ),
                   ),
                   Spacer(),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    color: Colors.grey[400],
+                    size: 16,
+                  ),
                 ],
               ),
             ],
@@ -380,25 +440,19 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
         );
         break;
       case 1:
-        // Navigate to Resources
-
-        // Navigator.pushNamed(context, '/resources');
+        // Already on Resources page
         break;
       case 2:
-        // Navigate to Add Patient
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => AddPatientScreen()),
         );
-        // Navigator.pushNamed(context, '/add-patient');
         break;
       case 3:
-        // Navigate to Settings
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => SettingsPage()),
         );
-        // Navigator.pushNamed(context, '/settings');
         break;
     }
   }
@@ -409,11 +463,13 @@ class VaccineInfo {
   final String description;
   final String doses;
   final bool isRecommended;
+  final String routeName;
 
   VaccineInfo({
     required this.name,
     required this.description,
     required this.doses,
     this.isRecommended = false,
+    required this.routeName,
   });
 }

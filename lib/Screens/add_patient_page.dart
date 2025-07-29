@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:immunova/Screens/educational_resources.dart';
+import 'package:immunova/Screens/patient_records.dart';
+import 'package:immunova/Screens/setting_page.dart';
 
 class ImmunizationRecord {
   final TextEditingController vaccineNameController = TextEditingController();
@@ -19,6 +22,8 @@ class AddPatientScreen extends StatefulWidget {
   // ignore: library_private_types_in_public_api
   _AddPatientScreenState createState() => _AddPatientScreenState();
 }
+
+int selectedBottomNavIndex = 2; // 'Add Patient' is active
 
 class _AddPatientScreenState extends State<AddPatientScreen> {
   final _formKey = GlobalKey<FormState>();
@@ -426,7 +431,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
   Widget _buildBottomNavigationBar() {
     return Container(
-      height: 80,
+      height: 70,
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -441,34 +446,80 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _buildBottomNavItem(Icons.people, 'Patients', false),
-          _buildBottomNavItem(Icons.description, 'Resources', false),
-          _buildBottomNavItem(Icons.person_add, 'Add Patient', true),
-          _buildBottomNavItem(Icons.settings, 'Settings', false),
+          _buildBottomNavItem(Icons.people, 'Patients', 0),
+          _buildBottomNavItem(Icons.description_outlined, 'Resources', 1),
+          _buildBottomNavItem(Icons.person_add_outlined, 'Add Patient', 2),
+          _buildBottomNavItem(Icons.settings_outlined, 'Settings', 3),
         ],
       ),
     );
   }
 
-  Widget _buildBottomNavItem(IconData icon, String label, bool isActive) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          icon,
-          color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-          size: 24,
+  Widget _buildBottomNavItem(IconData icon, String label, int index) {
+    bool isActive = selectedBottomNavIndex == index;
+    return GestureDetector(
+      onTap: () {
+        if (selectedBottomNavIndex == index) return;
+        setState(() {
+          selectedBottomNavIndex = index;
+        });
+        _handleBottomNavTap(index);
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+              size: 22,
+            ),
+            SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ],
         ),
-        SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-          ),
-        ),
-      ],
+      ),
     );
+  }
+
+  void _handleBottomNavTap(int index) {
+    if (index == selectedBottomNavIndex) return;
+
+    setState(() {
+      selectedBottomNavIndex = index;
+    });
+
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => PatientRecords()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => EducationalResourcesPage()),
+        );
+        break;
+      case 2:
+        // Already on Add Patient screen
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => SettingsPage()),
+        );
+        break;
+    }
   }
 
   void _savePatientRecord() {
