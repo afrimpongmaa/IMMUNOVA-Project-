@@ -4,12 +4,78 @@ class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _RemindersPageState createState() => _RemindersPageState();
 }
 
 class _RemindersPageState extends State<RemindersPage> {
   int selectedTabIndex = 0;
+
+  // Sample data for different tabs
+  final Map<int, List<ReminderItem>> tabData = {
+    0: [
+      // UPCOMING
+      ReminderItem(
+        date: '23\nJuly',
+        title: 'Polio Vaccine(IPV)',
+        subtitle: 'Johnson Amoah',
+        time: '3:30pm',
+      ),
+      ReminderItem(
+        date: '23\nJuly',
+        title: 'DTaP Vaccine',
+        subtitle: 'Julina Owusu',
+        time: '1:30pm',
+      ),
+      ReminderItem(
+        date: '23\nJuly',
+        title: 'BCG (Bacillus Calmette-Guerin)',
+        subtitle: 'Keziah Amoateng',
+        time: '12:00pm',
+      ),
+    ],
+    1: [
+      // COMPLETED
+      ReminderItem(
+        date: '11\nJuly',
+        title: 'COVID-19 Vaccine',
+        subtitle: 'John Konedu',
+        time: '8:30am',
+      ),
+      ReminderItem(
+        date: '09\nJuly',
+        title: 'Influenza (Flu) Vaccine',
+        subtitle: 'Grace Painstil',
+        time: '11:30am',
+      ),
+      ReminderItem(
+        date: '01\nJuly',
+        title: 'Hepatitis B Vaccine',
+        subtitle: 'Kwesi Osei',
+        time: '04:00pm',
+      ),
+    ],
+    2: [
+      // OVERDUE
+      ReminderItem(
+        date: '03\nJuly',
+        title: 'Meningococcal (MenACWY)',
+        subtitle: 'Obeng Kwame',
+        time: '3:30pm',
+      ),
+      ReminderItem(
+        date: '13\nJuly',
+        title: 'Polio Vaccine(IPV)',
+        subtitle: 'Kelvin Asibey',
+        time: '1:00pm',
+      ),
+      ReminderItem(
+        date: '22\nJuly',
+        title: 'TdaP Vaccine',
+        subtitle: 'Greatness Boateng',
+        time: '12:00pm',
+      ),
+    ],
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +114,7 @@ class _RemindersPageState extends State<RemindersPage> {
             color: Colors.white,
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _buildTab('UPCOMING', 0),
                 SizedBox(width: 20),
@@ -64,7 +131,7 @@ class _RemindersPageState extends State<RemindersPage> {
             color: Colors.white,
             padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             child: Text(
-              'TODAY',
+              _getSectionTitle(),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -76,37 +143,66 @@ class _RemindersPageState extends State<RemindersPage> {
 
           // Reminders List
           Expanded(
-            child: Container(
-              color: Colors.white,
-              child: ListView(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _buildReminderCard(
-                    date: '23\nJuly',
-                    title: 'Polio Vaccine(IPV)',
-                    subtitle: 'Johnson Amoah',
-                    time: '3:30pm',
-                  ),
-                  SizedBox(height: 12),
-                  _buildReminderCard(
-                    date: '23\nJuly',
-                    title: 'DTaP Vaccine',
-                    subtitle: 'Julina Owusu',
-                    time: '1:30pm',
-                  ),
-                  SizedBox(height: 12),
-                  _buildReminderCard(
-                    date: '23\nJuly',
-                    title: 'BCG (Bacillus Calmette-Guerin',
-                    subtitle: 'Keziah Amoateng',
-                    time: '12:00pm',
-                  ),
-                ],
-              ),
-            ),
+            child: Container(color: Colors.white, child: _buildRemindersList()),
           ),
         ],
       ),
+    );
+  }
+
+  String _getSectionTitle() {
+    switch (selectedTabIndex) {
+      case 0:
+        return 'TODAY';
+      case 1:
+        return 'COMPLETED';
+      case 2:
+        return 'OVERDUE';
+      default:
+        return 'TODAY';
+    }
+  }
+
+  Widget _buildRemindersList() {
+    List<ReminderItem> currentItems = tabData[selectedTabIndex] ?? [];
+
+    if (currentItems.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.notifications_none, size: 60, color: Colors.grey[400]),
+            SizedBox(height: 16),
+            Text(
+              'No reminders found',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: 20),
+      itemCount: currentItems.length,
+      itemBuilder: (context, index) {
+        final item = currentItems[index];
+        return Padding(
+          padding: EdgeInsets.only(bottom: 50),
+          child: _buildReminderCard(
+            date: item.date,
+            title: item.title,
+            subtitle: item.subtitle,
+            time: item.time,
+            isCompleted: selectedTabIndex == 1,
+            isOverdue: selectedTabIndex == 2,
+          ),
+        );
+      },
     );
   }
 
@@ -142,13 +238,25 @@ class _RemindersPageState extends State<RemindersPage> {
     required String title,
     required String subtitle,
     required String time,
+    bool isCompleted = false,
+    bool isOverdue = false,
   }) {
+    Color cardColor = Colors.white;
+    Color borderColor = Colors.grey[200]!;
+    Color dateBackgroundColor = Colors.transparent;
+
+    if (isCompleted) {
+      borderColor = Colors.green[200]!;
+    } else if (isOverdue) {
+      borderColor = Colors.red[200]!;
+    }
+
     return Container(
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
             color: Colors.grey.withOpacity(0.05),
@@ -165,6 +273,7 @@ class _RemindersPageState extends State<RemindersPage> {
             width: 50,
             height: 50,
             decoration: BoxDecoration(
+              color: dateBackgroundColor,
               border: Border.all(color: Colors.grey[300]!),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -205,12 +314,35 @@ class _RemindersPageState extends State<RemindersPage> {
                 SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(Icons.access_time, size: 16, color: Colors.grey[500]),
+                    Icon(
+                      Icons.access_time,
+                      size: 16,
+                      color: isOverdue ? Colors.red[400] : Colors.grey[500],
+                    ),
                     SizedBox(width: 4),
                     Text(
                       time,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isOverdue ? Colors.red[400] : Colors.grey[600],
+                      ),
                     ),
+                    if (isOverdue) ...[
+                      SizedBox(width: MediaQuery.sizeOf(context).width * .5),
+                      Icon(
+                        Icons.warning_rounded,
+                        size: 16,
+                        color: Colors.red[400],
+                      ),
+                    ],
+                    if (isCompleted) ...[
+                      SizedBox(width: MediaQuery.sizeOf(context).width * .5),
+                      Icon(
+                        Icons.check_circle,
+                        size: 16,
+                        color: Colors.green[400],
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -220,4 +352,18 @@ class _RemindersPageState extends State<RemindersPage> {
       ),
     );
   }
+}
+
+class ReminderItem {
+  final String date;
+  final String title;
+  final String subtitle;
+  final String time;
+
+  ReminderItem({
+    required this.date,
+    required this.title,
+    required this.subtitle,
+    required this.time,
+  });
 }

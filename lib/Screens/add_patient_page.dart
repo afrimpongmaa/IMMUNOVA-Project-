@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/patient_records.dart';
+import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/setting_page.dart';
 
 class ImmunizationRecord {
@@ -19,16 +20,12 @@ class AddPatientScreen extends StatefulWidget {
   const AddPatientScreen({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
-  _AddPatientScreenState createState() => _AddPatientScreenState();
+  State<AddPatientScreen> createState() => _AddPatientScreenState();
 }
-
-int selectedBottomNavIndex = 2; // 'Add Patient' is active
 
 class _AddPatientScreenState extends State<AddPatientScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controllers for text fields
   final TextEditingController _patientNameController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
   final TextEditingController _emergencyContactController =
@@ -39,11 +36,12 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   String? _selectedGender;
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
 
-  // Controllers for immunization fields
   List<ImmunizationRecord> _immunizationRecords = [
     ImmunizationRecord(),
     ImmunizationRecord(),
   ];
+
+  int selectedBottomNavIndex = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -69,10 +67,18 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         actions: [
           Container(
             margin: EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: Color(0xFF4ECDC4),
-              radius: 18,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
+            child: GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const DoctorProfileScreen(),
+                ),
+              ),
+              child: CircleAvatar(
+                backgroundColor: Color(0xFF4ECDC4),
+                radius: 18,
+                child: Icon(Icons.person, color: Colors.white, size: 20),
+              ),
             ),
           ),
         ],
@@ -84,17 +90,14 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Personal Details Section
               _buildSectionHeader('PERSONAL DETAILS'),
               SizedBox(height: 16),
-
               _buildTextField(
                 controller: _patientNameController,
                 label: 'Patient Name',
                 hint: '',
               ),
               SizedBox(height: 16),
-
               _buildTextField(
                 controller: _dobController,
                 label: 'Date of Birth',
@@ -102,7 +105,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 suffixIcon: Icons.calendar_today,
               ),
               SizedBox(height: 16),
-
               _buildDropdownField(
                 label: 'Gender',
                 value: _selectedGender,
@@ -113,32 +115,23 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                   });
                 },
               ),
-
               SizedBox(height: 32),
-
-              // Contact Information Section
               _buildSectionHeader('CONTACT INFORMATION'),
               SizedBox(height: 16),
-
               _buildTextField(
                 controller: _emergencyContactController,
-                label: 'Emergency Contact Number',
+                label: 'Parent or Guardian\'s Name',
                 hint: '',
               ),
               SizedBox(height: 16),
-
               _buildTextField(
                 controller: _guardianNumberController,
-                label: '''Guardian's Phone Number''',
+                label: 'Guardian\'s Phone Number',
                 hint: '',
               ),
-
               SizedBox(height: 32),
-
-              // Immunization Schedule Section
               _buildSectionHeader('IMMUNIZATION SCHEDULE'),
               SizedBox(height: 16),
-
               ..._immunizationRecords.asMap().entries.map((entry) {
                 int index = entry.key;
                 ImmunizationRecord record = entry.value;
@@ -150,10 +143,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                   ],
                 );
               }).toList(),
-
               SizedBox(height: 16),
-
-              // Add more immunization record button
               Container(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -181,16 +171,12 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                   ),
                 ),
               ),
-
               SizedBox(height: 40),
-
-              // Save Button
               Container(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
-                      // Handle save patient record
                       _savePatientRecord();
                     }
                   },
@@ -217,6 +203,116 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
+    );
+  }
+
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildBottomNavItem(Icons.people, 'Patients', 0),
+          _buildBottomNavItem(Icons.description_outlined, 'Resources', 1),
+          _buildBottomNavItem(Icons.person_add_outlined, 'Add Patient', 2),
+          _buildBottomNavItem(Icons.settings_outlined, 'Settings', 3),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavItem(IconData icon, String label, int index) {
+    bool isActive = selectedBottomNavIndex == index;
+    return GestureDetector(
+      onTap: () => _handleBottomNavTap(index),
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+              size: 22,
+            ),
+            SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleBottomNavTap(int index) {
+    if (selectedBottomNavIndex == index) return;
+    setState(() {
+      selectedBottomNavIndex = index;
+    });
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const PatientRecords()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EducationalResourcesPage(),
+          ),
+        );
+        break;
+      case 2:
+        break;
+      case 3:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsPage()),
+        );
+        break;
+    }
+  }
+
+  void _addImmunizationRecord() {
+    setState(() {
+      _immunizationRecords.add(ImmunizationRecord());
+    });
+  }
+
+  void _removeImmunizationRecord(int index) {
+    if (_immunizationRecords.length > 1) {
+      setState(() {
+        _immunizationRecords[index].dispose();
+        _immunizationRecords.removeAt(index);
+      });
+    }
+  }
+
+  void _savePatientRecord() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Patient record saved successfully!'),
+        backgroundColor: Color(0xFF4ECDC4),
+      ),
     );
   }
 
@@ -379,16 +475,12 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
             ],
           ),
           SizedBox(height: 16),
-
-          // Vaccine Name Field
           _buildTextField(
             controller: record.vaccineNameController,
             label: 'Vaccine Name',
             hint: 'e.g., BCG, Hepatitis B, DPT',
           ),
           SizedBox(height: 16),
-
-          // Date and Dose in a Row
           Row(
             children: [
               Expanded(
@@ -414,136 +506,15 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     );
   }
 
-  void _addImmunizationRecord() {
-    setState(() {
-      _immunizationRecords.add(ImmunizationRecord());
-    });
-  }
-
-  void _removeImmunizationRecord(int index) {
-    if (_immunizationRecords.length > 1) {
-      setState(() {
-        _immunizationRecords[index].dispose();
-        _immunizationRecords.removeAt(index);
-      });
-    }
-  }
-
-  Widget _buildBottomNavigationBar() {
-    return Container(
-      height: 70,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: Offset(0, -3),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildBottomNavItem(Icons.people, 'Patients', 0),
-          _buildBottomNavItem(Icons.description_outlined, 'Resources', 1),
-          _buildBottomNavItem(Icons.person_add_outlined, 'Add Patient', 2),
-          _buildBottomNavItem(Icons.settings_outlined, 'Settings', 3),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNavItem(IconData icon, String label, int index) {
-    bool isActive = selectedBottomNavIndex == index;
-    return GestureDetector(
-      onTap: () {
-        if (selectedBottomNavIndex == index) return;
-        setState(() {
-          selectedBottomNavIndex = index;
-        });
-        _handleBottomNavTap(index);
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-              size: 22,
-            ),
-            SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _handleBottomNavTap(int index) {
-    if (index == selectedBottomNavIndex) return;
-
-    setState(() {
-      selectedBottomNavIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => PatientRecords()),
-        );
-        break;
-      case 1:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => EducationalResourcesPage()),
-        );
-        break;
-      case 2:
-        // Already on Add Patient screen
-        break;
-      case 3:
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => SettingsPage()),
-        );
-        break;
-    }
-  }
-
-  void _savePatientRecord() {
-    // Implement save functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Patient record saved successfully!'),
-        backgroundColor: Color(0xFF4ECDC4),
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _patientNameController.dispose();
     _dobController.dispose();
     _emergencyContactController.dispose();
     _guardianNumberController.dispose();
-
-    // Dispose immunization record controllers
     for (var record in _immunizationRecords) {
       record.dispose();
     }
-
     super.dispose();
   }
 }

@@ -8,6 +8,7 @@ import 'package:immunova/Screens/bcg_vaccine_screen.dart';
 import 'package:immunova/Screens/menacwy_vaccine_screen.dart';
 import 'package:immunova/Screens/hpv_vaccine_screen.dart';
 import 'package:immunova/Screens/patient_records.dart';
+import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/setting_page.dart';
 
 class EducationalResourcesPage extends StatefulWidget {
@@ -105,12 +106,20 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
         ),
         centerTitle: true,
         actions: [
-          Container(
-            margin: EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: Color(0xFF4ECDC4),
-              radius: 18,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DoctorProfileScreen(),
+              ),
+            ),
+            child: Container(
+              margin: EdgeInsets.only(right: 16),
+              child: CircleAvatar(
+                backgroundColor: Color(0xFF4ECDC4),
+                radius: 18,
+                child: Icon(Icons.person, color: Colors.white, size: 20),
+              ),
             ),
           ),
         ],

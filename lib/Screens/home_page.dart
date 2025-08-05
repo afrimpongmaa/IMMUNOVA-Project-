@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:immunova/Screens/add_patient_page.dart';
+import 'package:immunova/Screens/admin_page.dart';
 import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/patient_records.dart';
+import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/reminders_page.dart';
 import 'package:immunova/Screens/setting_page.dart';
 
@@ -13,6 +15,7 @@ class MedicalHomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
+        leading: SizedBox(),
         backgroundColor: Colors.grey[50],
         elevation: 0,
         actions: [
@@ -29,15 +32,17 @@ class MedicalHomeScreen extends StatelessWidget {
                   },
                   icon: Icon(Icons.notifications_none_outlined),
                 ),
-                CircleAvatar(
-                  backgroundColor: Colors.green,
-                  radius: 18,
-                  child: Text(
-                    'J',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => DoctorProfileScreen(),
                     ),
+                  ),
+                  child: CircleAvatar(
+                    backgroundColor: Color(0xFF4ECDC4),
+                    radius: 18,
+                    child: Icon(Icons.person, color: Colors.white, size: 24),
                   ),
                 ),
               ],
@@ -200,6 +205,7 @@ class MedicalHomeScreen extends StatelessWidget {
               ),
             ),
             SizedBox(height: 20),
+            ImmunizationOverviewWidget(),
           ],
         ),
       ),

@@ -1,20 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:immunova/Screens/add_patient_page.dart';
+import 'package:immunova/Screens/educational_resources.dart';
+import 'package:immunova/Screens/login_screen.dart';
+import 'package:immunova/Screens/onboarding_screen.dart';
+import 'package:immunova/Screens/patient_records.dart';
+import 'package:immunova/Screens/profile.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _SettingsPageState createState() => _SettingsPageState();
 }
 
 class _SettingsPageState extends State<SettingsPage> {
   bool pushNotifications = true;
   bool immunizationReminders = true;
+  int selectedBottomNavIndex = 3; // Settings is selected by default
 
   // User data controllers
   final TextEditingController _nameController = TextEditingController(
-    text: 'Dr. Pusatine Asante',
+    text: 'Dr. Faustina Asante',
   );
   final TextEditingController _phoneController = TextEditingController(
     text: '+233 123 456 789',
@@ -80,12 +86,20 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                       SizedBox(height: 6),
-                      Text(
-                        'View Profile',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF4ECDC4),
-                          fontWeight: FontWeight.w500,
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const DoctorProfileScreen(),
+                          ),
+                        ),
+                        child: Text(
+                          'View Profile',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF4ECDC4),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -209,7 +223,14 @@ class _SettingsPageState extends State<SettingsPage> {
               margin: EdgeInsets.symmetric(horizontal: 20),
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   padding: EdgeInsets.symmetric(vertical: 16),
@@ -245,7 +266,7 @@ class _SettingsPageState extends State<SettingsPage> {
               style: TextStyle(fontSize: 11, color: Colors.grey[400]),
             ),
 
-            SizedBox(height: 32),
+            SizedBox(height: 100), // Add space for bottom navigation
           ],
         ),
       ),
@@ -320,6 +341,137 @@ class _SettingsPageState extends State<SettingsPage> {
         ),
       ),
     );
+  }
+
+  Widget _buildToggleItem({
+    required IconData icon,
+    required String title,
+    required bool value,
+    required Function(bool) onChanged,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey[600], size: 20),
+          SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.black,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: Color(0xFF4ECDC4),
+            activeTrackColor: Color(0xFF4ECDC4).withOpacity(0.3),
+            inactiveThumbColor: Colors.grey[400],
+            inactiveTrackColor: Colors.grey[300],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: Colors.grey[200],
+      indent: 56,
+    );
+  }
+
+  // Updated Bottom Navigation Bar from PatientRecords
+  Widget _buildBottomNavigationBar() {
+    return Container(
+      height: 70,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: Offset(0, -3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildBottomNavItem(Icons.people, 'Patients', 0),
+          _buildBottomNavItem(Icons.description_outlined, 'Resources', 1),
+          _buildBottomNavItem(Icons.person_add_outlined, 'Add Patient', 2),
+          _buildBottomNavItem(Icons.settings_outlined, 'Settings', 3),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavItem(IconData icon, String label, int index) {
+    bool isActive = selectedBottomNavIndex == index;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedBottomNavIndex = index;
+        });
+        _handleBottomNavTap(index);
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+              size: 22,
+            ),
+            SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
+                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleBottomNavTap(int index) {
+    switch (index) {
+      case 0:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => PatientRecords()),
+        );
+        break;
+      case 1:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => EducationalResourcesPage()),
+        );
+        break;
+      case 2:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => AddPatientScreen()),
+        );
+        break;
+      case 3:
+        // Settings is already active, no action needed
+        break;
+    }
   }
 
   // Generic method to show edit popup
@@ -467,98 +619,6 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         );
       },
-    );
-  }
-
-  Widget _buildToggleItem({
-    required IconData icon,
-    required String title,
-    required bool value,
-    required Function(bool) onChanged,
-  }) {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
-          SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.black,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: Color(0xFF4ECDC4),
-            activeTrackColor: Color(0xFF4ECDC4).withOpacity(0.3),
-            inactiveThumbColor: Colors.grey[400],
-            inactiveTrackColor: Colors.grey[300],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      color: Colors.grey[200],
-      indent: 56,
-    );
-  }
-
-  Widget _buildBottomNavigationBar() {
-    return Container(
-      height: 70,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: Offset(0, -3),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _buildBottomNavItem(Icons.people_outline, 'Patients', false),
-          _buildBottomNavItem(Icons.description_outlined, 'Resources', false),
-          _buildBottomNavItem(Icons.person_add_outlined, 'Add Patient', false),
-          _buildBottomNavItem(Icons.settings, 'Settings', true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNavItem(IconData icon, String label, bool isActive) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          icon,
-          color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-          size: 22,
-        ),
-        SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isActive ? Color(0xFF4ECDC4) : Colors.grey[400],
-            fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
-          ),
-        ),
-      ],
     );
   }
 
@@ -801,9 +861,29 @@ class _SettingsPageState extends State<SettingsPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(
-            'Change Password',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Color(0xFF4ECDC4).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.lock_outline,
+                  color: Color(0xFF4ECDC4),
+                  size: 20,
+                ),
+              ),
+              SizedBox(width: 12),
+              Text(
+                'Change Password',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
