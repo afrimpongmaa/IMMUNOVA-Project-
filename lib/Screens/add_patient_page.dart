@@ -3,6 +3,12 @@ import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/setting_page.dart';
+import 'package:provider/provider.dart';
+
+import '../database/database_helper.dart';
+import '../models/patient.dart';
+import '../models/immunization.dart';
+import '../providers/user_session.dart';
 
 class ImmunizationRecord {
   final TextEditingController vaccineNameController = TextEditingController();
@@ -24,6 +30,7 @@ class AddPatientScreen extends StatefulWidget {
 }
 
 class _AddPatientScreenState extends State<AddPatientScreen> {
+  final DatabaseHelper _db = DatabaseHelper();
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _patientNameController = TextEditingController();
@@ -43,20 +50,63 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
 
   int selectedBottomNavIndex = 2;
 
+  // Add this method for showing the date picker
+  Future<void> _selectDate(BuildContext context) async {
+    DateTime initialDate =
+        DateTime.now().subtract(const Duration(days: 365 * 5));
+    DateTime firstDate = DateTime(1900);
+    DateTime lastDate = DateTime.now();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _dobController.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
+  // Add method for immunization date picker
+  Future<void> _selectImmunizationDate(BuildContext context, int index) async {
+    DateTime initialDate = DateTime.now();
+    DateTime firstDate = DateTime(1900);
+    DateTime lastDate = DateTime.now();
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+    if (picked != null) {
+      setState(() {
+        _immunizationRecords[index].dateController.text =
+            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final session = Provider.of<UserSession>(context);
+    final doctorName = session.displayName ?? 'Doctor';
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'ADD PATIENT',
-          style: TextStyle(
+          'ADD PATIENT • ${doctorName}',
+          style: const TextStyle(
             color: Colors.black,
             fontSize: 16,
             fontWeight: FontWeight.w600,
@@ -101,8 +151,10 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               _buildTextField(
                 controller: _dobController,
                 label: 'Date of Birth',
-                hint: '',
+                hint: 'YYYY-MM-DD',
                 suffixIcon: Icons.calendar_today,
+                readOnly: true,
+                onTap: () => _selectDate(context),
               ),
               SizedBox(height: 16),
               _buildDropdownField(
@@ -307,13 +359,80 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     }
   }
 
-  void _savePatientRecord() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Patient record saved successfully!'),
-        backgroundColor: Color(0xFF4ECDC4),
-      ),
-    );
+  void _savePatientRecord() async {
+    try {
+      final currentLocalId =
+          Provider.of<UserSession>(context, listen: false).localId;
+      if (currentLocalId == null) {
+        throw Exception('No signed-in user. Please sign in first.');
+      }
+
+      final patient = Patient(
+        patientId: DateTime.now().millisecondsSinceEpoch.toString(),
+        docId: currentLocalId,
+        name: _patientNameController.text,
+        dob: DateTime.parse(_dobController.text),
+        gender: _selectedGender ?? 'M',
+        guardianName: _emergencyContactController.text,
+        guardianNum: _guardianNumberController.text,
+      );
+
+      final patientLocalId = await _db.insert('patients', patient.toMap());
+
+      // Save immunization records and track latest immunization date
+      DateTime? latest;
+      for (var record in _immunizationRecords) {
+        if (record.vaccineNameController.text.isNotEmpty &&
+            record.dateController.text.isNotEmpty) {
+          DateTime? parsedDate;
+          try {
+            parsedDate = DateTime.parse(record.dateController.text);
+          } catch (e) {
+            parsedDate = null;
+          }
+          if (parsedDate != null) {
+            if (latest == null || parsedDate.isAfter(latest)) {
+              latest = parsedDate;
+            }
+
+            final immunization = Immunization(
+              patientId: patientLocalId,
+              vaccineId: 1, // Replace with actual vaccine ID mapping
+              dateTaken: parsedDate,
+              dose: record.doseController.text,
+              status: 'Immunized',
+            );
+            await _db.insert('immunizations', immunization.toMap());
+          }
+        }
+      }
+
+      // Update patient's last_time_immunized if we found a date
+      if (latest != null) {
+        final updatedPatientMap = patient.toMap();
+        updatedPatientMap['last_time_immunized'] = latest.toIso8601String();
+        await _db.update('patients', updatedPatientMap, patientLocalId);
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Patient record saved successfully!'),
+          backgroundColor: Color(0xFF4ECDC4),
+        ),
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const PatientRecords()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving patient record: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Widget _buildSectionHeader(String title) {
@@ -334,6 +453,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     required String hint,
     IconData? suffixIcon,
     TextInputType? keyboardType,
+    bool readOnly = false,
+    VoidCallback? onTap,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,6 +471,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: readOnly,
+          onTap: onTap,
           decoration: InputDecoration(
             hintText: hint,
             suffixIcon: suffixIcon != null
@@ -374,6 +497,14 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
           validator: (value) {
             if (value == null || value.isEmpty) {
               return 'This field is required';
+            }
+            // Only validate date format for DOB field
+            if (label == 'Date of Birth') {
+              try {
+                DateTime.parse(value);
+              } catch (_) {
+                return 'Enter a valid date (YYYY-MM-DD)';
+              }
             }
             return null;
           },
@@ -487,8 +618,10 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 child: _buildTextField(
                   controller: record.dateController,
                   label: 'Date Taken',
-                  hint: 'MM/DD/YYYY',
+                  hint: 'YYYY-MM-DD',
                   suffixIcon: Icons.calendar_today,
+                  readOnly: true,
+                  onTap: () => _selectImmunizationDate(context, index),
                 ),
               ),
               SizedBox(width: 16),

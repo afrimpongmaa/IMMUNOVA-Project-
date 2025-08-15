@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:immunova/Screens/add_patient_page.dart';
 import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/setting_page.dart';
+import 'package:provider/provider.dart';
+import '../database/database_helper.dart';
+import '../models/patient.dart';
+import '../providers/user_session.dart';
 
 class PatientRecords extends StatefulWidget {
   const PatientRecords({super.key});
@@ -11,60 +15,99 @@ class PatientRecords extends StatefulWidget {
 }
 
 class _PatientRecordsState extends State<PatientRecords> {
-  String selectedFilter = 'All Patients';
-  int selectedBottomNavIndex = 0;
+  final DatabaseHelper _db = DatabaseHelper();
+  List<Patient> _patients = [];
+  List<Patient> _filteredPatients = [];
+  bool _isLoading = true;
+  String _selectedFilter = 'All';
+  int selectedBottomNavIndex = 0; // Add this line
 
   final TextEditingController _searchController = TextEditingController();
 
   final List<String> filters = ['All Patients', 'immunized', 'Overdue'];
 
-  final List<PatientRecord> patients = [
-    PatientRecord(
-      name: 'JULIANA ADEBI',
-      age: '(0-1 year)',
-      lastImmunized: 'Last Immunized: 2022-08-20',
-      status: 'immunized',
-      statusColor: Colors.green,
-      avatarColor: Color(0xFF4ECDC4),
-    ),
-    PatientRecord(
-      name: 'ROGER AIDJ',
-      age: '(4-5 years)',
-      lastImmunized: 'Last Immunized: 2023-05-16',
-      status: 'Overdue',
-      statusColor: Colors.red,
-      avatarColor: Color(0xFF4ECDC4),
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadPatients();
+  }
 
-  List<PatientRecord> get filteredPatients {
-    List<PatientRecord> filtered = patients;
-
-    if (selectedFilter == 'immunized') {
-      filtered = filtered
-          .where((patient) => patient.status == 'immunized')
-          .toList();
-    } else if (selectedFilter == 'Overdue') {
-      filtered = filtered
-          .where((patient) => patient.status == 'Overdue')
-          .toList();
+  Future<void> _loadPatients() async {
+    try {
+      final session = Provider.of<UserSession>(context, listen: false);
+      final userId = session.localId;
+      List<Map<String, dynamic>> records;
+      if (userId != null) {
+        records = await _db.queryByIndex('patients', 'doc_id', userId);
+      } else {
+        records = await _db.getAll('patients'); // fallback if no user
+      }
+      setState(() {
+        _patients = records.map((r) => Patient.fromMap(r)).toList();
+        _filteredPatients = _patients;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading patients: $e');
+      setState(() => _isLoading = false);
     }
+  }
 
-    if (_searchController.text.isNotEmpty) {
-      filtered = filtered
-          .where(
-            (patient) => patient.name.toLowerCase().contains(
-              _searchController.text.toLowerCase(),
-            ),
-          )
-          .toList();
+  void _filterPatients(String filter) {
+    setState(() {
+      _selectedFilter = filter;
+      if (filter == 'All') {
+        _filteredPatients = _patients;
+      } else {
+        _filteredPatients = _patients
+            .where((patient) =>
+                patient.status.toLowerCase() == filter.toLowerCase())
+            .toList();
+      }
+    });
+  }
+
+  void _updatePatient(Patient oldPatient, String newName, String newAge) async {
+    try {
+      // Create new patient instance with updated values
+      final updatedPatient = Patient(
+        localId: oldPatient.localId,
+        remoteId: oldPatient.remoteId,
+        patientId: oldPatient.patientId,
+        docId: oldPatient.docId,
+        name: newName,
+        dob: DateTime.now().subtract(
+            Duration(days: 365 * int.parse(newAge))), // Convert age to DOB
+        gender: oldPatient.gender,
+        guardianName: oldPatient.guardianName,
+        guardianNum: oldPatient.guardianNum,
+        status: oldPatient.status,
+        statusColor: oldPatient.statusColor,
+        avatarColor: oldPatient.avatarColor,
+      );
+
+      // Update in database
+      await _db.update('patients', updatedPatient.toMap(), oldPatient.localId!);
+
+      // Update state
+      setState(() {
+        final index =
+            _patients.indexWhere((p) => p.localId == oldPatient.localId);
+        if (index != -1) {
+          _patients[index] = updatedPatient;
+        }
+        _filterPatients(_selectedFilter);
+      });
+    } catch (e) {
+      print('Error updating patient: $e');
     }
-
-    return filtered;
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = Provider.of<UserSession>(context);
+    final name = session.displayName ?? 'Doctor';
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -107,9 +150,8 @@ class _PatientRecordsState extends State<PatientRecords> {
                 ),
                 SizedBox(height: 16),
                 Row(
-                  children: filters
-                      .map((filter) => _buildFilterTab(filter))
-                      .toList(),
+                  children:
+                      filters.map((filter) => _buildFilterTab(filter)).toList(),
                 ),
               ],
             ),
@@ -117,16 +159,18 @@ class _PatientRecordsState extends State<PatientRecords> {
 
           // Patient List
           Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.all(20),
-              itemCount: filteredPatients.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: EdgeInsets.only(bottom: 16),
-                  child: _buildPatientCard(filteredPatients[index]),
-                );
-              },
-            ),
+            child: _isLoading
+                ? Center(child: CircularProgressIndicator())
+                : ListView.builder(
+                    padding: EdgeInsets.all(20),
+                    itemCount: _filteredPatients.length,
+                    itemBuilder: (context, index) {
+                      return Padding(
+                        padding: EdgeInsets.only(bottom: 16),
+                        child: _buildPatientCard(_filteredPatients[index]),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -135,10 +179,10 @@ class _PatientRecordsState extends State<PatientRecords> {
   }
 
   Widget _buildFilterTab(String filter) {
-    final isSelected = selectedFilter == filter;
+    final isSelected = _selectedFilter == filter;
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => selectedFilter = filter),
+        onTap: () => setState(() => _selectedFilter = filter),
         child: Container(
           margin: EdgeInsets.only(right: filter != filters.last ? 8 : 0),
           padding: EdgeInsets.symmetric(vertical: 10),
@@ -160,7 +204,7 @@ class _PatientRecordsState extends State<PatientRecords> {
     );
   }
 
-  Widget _buildPatientCard(PatientRecord patient) {
+  Widget _buildPatientCard(Patient patient) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -355,13 +399,18 @@ class _PatientRecordsState extends State<PatientRecords> {
     }
   }
 
-  void _editPatient(PatientRecord patient) {
+  void _editPatient(Patient patient) {
+    _showEditDialog(patient);
+  }
+
+  void _showEditDialog(Patient patient) {
     final nameCtrl = TextEditingController(text: patient.name);
-    final ageCtrl = TextEditingController(text: patient.age);
+    final ageCtrl =
+        TextEditingController(text: patient.age.replaceAll(' years', ''));
 
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (context) => AlertDialog(
         title: Text('Edit Patient'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -370,10 +419,10 @@ class _PatientRecordsState extends State<PatientRecords> {
               controller: nameCtrl,
               decoration: InputDecoration(labelText: 'Name'),
             ),
-            SizedBox(height: 10),
             TextField(
               controller: ageCtrl,
-              decoration: InputDecoration(labelText: 'Age Group'),
+              decoration: InputDecoration(labelText: 'Age (years)'),
+              keyboardType: TextInputType.number,
             ),
           ],
         ),
@@ -382,24 +431,46 @@ class _PatientRecordsState extends State<PatientRecords> {
             onPressed: () => Navigator.pop(context),
             child: Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
+          TextButton(
+            onPressed: () async {
+              // Parse age safely as int
+              final parsedAge = int.tryParse(ageCtrl.text) ?? 0;
+              // Create a new Patient instance with updated values
+              final updatedPatient = Patient(
+                localId: patient.localId,
+                remoteId: patient.remoteId,
+                patientId: patient.patientId,
+                docId: patient.docId,
+                name: nameCtrl.text,
+                dob: DateTime.now().subtract(Duration(days: 365 * parsedAge)),
+                gender: patient.gender,
+                emergencyContact: patient.emergencyContact,
+                guardianName: patient.guardianName,
+                guardianNum: patient.guardianNum,
+                lastTimeImmunized: patient.lastTimeImmunized,
+                status: patient.status,
+                statusColor: patient.statusColor,
+                avatarColor: patient.avatarColor,
+              );
+              // Update in database (assuming you have an update method)
+              await _db.update(
+                  'patients', updatedPatient.toMap(), patient.localId!);
               setState(() {
-                patient.name = nameCtrl.text;
-                patient.age = ageCtrl.text;
-                // Status and statusColor remain unchanged
+                final idx =
+                    _patients.indexWhere((p) => p.localId == patient.localId);
+                if (idx != -1) _patients[idx] = updatedPatient;
+                _filterPatients(_selectedFilter);
               });
               Navigator.pop(context);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF4ECDC4)),
-            child: Text('Save', style: TextStyle(color: Colors.white)),
+            child: Text('Save'),
           ),
         ],
       ),
     );
   }
 
-  void _deletePatient(PatientRecord patient) {
+  void _deletePatient(Patient patient) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -413,7 +484,7 @@ class _PatientRecordsState extends State<PatientRecords> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
-              setState(() => patients.remove(patient));
+              setState(() => _patients.remove(patient));
               Navigator.pop(context);
             },
             child: Text('Delete', style: TextStyle(color: Colors.white)),
@@ -423,11 +494,11 @@ class _PatientRecordsState extends State<PatientRecords> {
     );
   }
 
-  void _showPatientDetails(PatientRecord patient) {
+  void _showPatientDetails(Patient patient) {
     // Your existing implementation
   }
 
-  void _showImmunizationLog(PatientRecord patient) {
+  void _showImmunizationLog(Patient patient) {
     // Your existing implementation
   }
 
@@ -436,22 +507,4 @@ class _PatientRecordsState extends State<PatientRecords> {
     _searchController.dispose();
     super.dispose();
   }
-}
-
-class PatientRecord {
-  String name;
-  String age;
-  String lastImmunized;
-  String status;
-  Color statusColor;
-  final Color avatarColor;
-
-  PatientRecord({
-    required this.name,
-    required this.age,
-    required this.lastImmunized,
-    required this.status,
-    required this.statusColor,
-    required this.avatarColor,
-  });
 }

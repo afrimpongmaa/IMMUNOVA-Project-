@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:immunova/Screens/reminders_page.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_session.dart';
 
 class DoctorProfileScreen extends StatelessWidget {
   const DoctorProfileScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<UserSession>();
+    final user = session.currentUser;
+    final name = (user?['full_name'] ?? 'User') as String;
+    final phone = (user?['phone_number'] ?? '-') as String;
+    final hospital = (user?['hospital_name'] ?? 'LOCAL') as String;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -75,29 +83,29 @@ class DoctorProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Dr Faustina Asante',
-                          style: TextStyle(
+                          name,
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             color: Colors.black87,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 4),
                         Text(
-                          'Pediatric Doctor',
-                          style: TextStyle(
+                          hospital,
+                          style: const TextStyle(
                             fontSize: 14,
                             color: Colors.grey,
                             fontWeight: FontWeight.w400,
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
+                        const SizedBox(height: 2),
+                        const Text(
                           '★★★★★',
                           style: TextStyle(fontSize: 14, color: Colors.amber),
                         ),
@@ -140,17 +148,12 @@ class DoctorProfileScreen extends StatelessWidget {
                   const SizedBox(height: 16),
                   _buildInfoItem(Icons.public, 'Public Health'),
                   const SizedBox(height: 12),
-                  _buildInfoItem(Icons.phone_outlined, '0506656858'),
+                  _buildInfoItem(Icons.phone_outlined, phone),
+                  const SizedBox(height: 12),
+                  _buildInfoItem(Icons.location_on_outlined, hospital),
                   const SizedBox(height: 12),
                   _buildInfoItem(
-                    Icons.location_on_outlined,
-                    'Lebanon Family Hospital',
-                  ),
-                  const SizedBox(height: 12),
-                  _buildInfoItem(
-                    Icons.access_time,
-                    'Hours: 8am - 5pm, Mon - Fri',
-                  ),
+                      Icons.access_time, 'Hours: 8am - 5pm, Mon - Fri'),
                 ],
               ),
             ),

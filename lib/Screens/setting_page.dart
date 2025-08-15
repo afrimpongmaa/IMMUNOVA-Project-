@@ -5,6 +5,10 @@ import 'package:immunova/Screens/login_screen.dart';
 import 'package:immunova/Screens/onboarding_screen.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_session.dart';
+import '../database/database_helper.dart';
+import 'signin_screen.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -16,23 +20,39 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool pushNotifications = true;
   bool immunizationReminders = true;
-  int selectedBottomNavIndex = 3; // Settings is selected by default
+  int selectedBottomNavIndex = 3;
 
-  // User data controllers
-  final TextEditingController _nameController = TextEditingController(
-    text: 'Dr. Faustina Asante',
-  );
-  final TextEditingController _phoneController = TextEditingController(
-    text: '+233 123 456 789',
-  );
+  final TextEditingController _nameController = TextEditingController(text: '');
+  final TextEditingController _phoneController =
+      TextEditingController(text: '');
   final TextEditingController _currentPasswordController =
       TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
+  final DatabaseHelper _db = DatabaseHelper();
+
+  @override
+  void initState() {
+    super.initState();
+    // Load current user data into controllers after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final session = context.read<UserSession>();
+      final user = session.currentUser;
+      if (user != null) {
+        _nameController.text = (user['full_name'] ?? '') as String;
+        _phoneController.text = (user['phone_number'] ?? '') as String;
+        setState(() {});
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final session = context.watch<UserSession>();
+    final user = session.currentUser;
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -69,7 +89,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _nameController.text,
+                        _nameController.text.isEmpty
+                            ? (user?['full_name'] ?? 'User')
+                            : _nameController.text,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
@@ -78,7 +100,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'EXTENDED',
+                        (user?['hospital_name'] ?? 'LOCAL').toString(),
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey[600],
@@ -90,8 +112,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const DoctorProfileScreen(),
-                          ),
+                              builder: (context) =>
+                                  const DoctorProfileScreen()),
                         ),
                         child: Text(
                           'View Profile',
@@ -122,6 +144,16 @@ class _SettingsPageState extends State<SettingsPage> {
                     fieldLabel: 'Full Name',
                     controller: _nameController,
                     successMessage: 'Name updated successfully',
+                    onSave: () async {
+                      await _updateUserField(
+                          'full_name', _nameController.text.trim());
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('Name updated successfully'),
+                            backgroundColor: Color(0xFF4ECDC4)),
+                      );
+                    },
                   );
                 },
               ),
@@ -135,8 +167,17 @@ class _SettingsPageState extends State<SettingsPage> {
                     fieldLabel: 'Phone Number',
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
-                    prefixText: '+233 ',
                     successMessage: 'Phone number updated successfully',
+                    onSave: () async {
+                      await _updateUserField(
+                          'phone_number', _phoneController.text.trim());
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content: Text('Phone number updated successfully'),
+                            backgroundColor: Color(0xFF4ECDC4)),
+                      );
+                    },
                   );
                 },
               ),
@@ -223,20 +264,19 @@ class _SettingsPageState extends State<SettingsPage> {
               margin: EdgeInsets.symmetric(horizontal: 20),
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  await context.read<UserSession>().signOut();
+                  Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const SignInScreen()),
+                    (r) => false,
                   );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   padding: EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                      borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
                 ),
                 child: Row(
@@ -272,6 +312,18 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
+  }
+
+  Future<void> _updateUserField(String key, String value) async {
+    final session = context.read<UserSession>();
+    final user = session.currentUser;
+    if (user == null) return;
+    final localId = user['local_id'] as int;
+    final updated = Map<String, dynamic>.from(user);
+    updated[key] = value;
+    await _db.update('users', updated, localId);
+    await session.loadFromPrefs(); // refresh session
+    setState(() {}); // refresh UI
   }
 
   Widget _buildSectionContainer(List<Widget> children) {

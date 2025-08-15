@@ -10,10 +10,8 @@ class RemindersPage extends StatefulWidget {
 class _RemindersPageState extends State<RemindersPage> {
   int selectedTabIndex = 0;
 
-  // Sample data for different tabs
   final Map<int, List<ReminderItem>> tabData = {
     0: [
-      // UPCOMING
       ReminderItem(
         date: '23\nJuly',
         title: 'Polio Vaccine(IPV)',
@@ -34,7 +32,6 @@ class _RemindersPageState extends State<RemindersPage> {
       ),
     ],
     1: [
-      // COMPLETED
       ReminderItem(
         date: '11\nJuly',
         title: 'COVID-19 Vaccine',
@@ -55,7 +52,6 @@ class _RemindersPageState extends State<RemindersPage> {
       ),
     ],
     2: [
-      // OVERDUE
       ReminderItem(
         date: '03\nJuly',
         title: 'Meningococcal (MenACWY)',
@@ -94,18 +90,23 @@ class _RemindersPageState extends State<RemindersPage> {
           ),
         ),
         centerTitle: true,
-        actions: [
-          Container(
-            margin: EdgeInsets.only(right: 16),
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.cyan[300],
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.add, color: Colors.white, size: 20),
-          ),
-        ],
+        actions: selectedTabIndex == 0
+            ? [
+                GestureDetector(
+                  onTap: _addReminder,
+                  child: Container(
+                    margin: EdgeInsets.only(right: 16),
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.cyan[300],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.add, color: Colors.white, size: 20),
+                  ),
+                ),
+              ]
+            : [],
       ),
       body: Column(
         children: [
@@ -193,13 +194,16 @@ class _RemindersPageState extends State<RemindersPage> {
         final item = currentItems[index];
         return Padding(
           padding: EdgeInsets.only(bottom: 50),
-          child: _buildReminderCard(
-            date: item.date,
-            title: item.title,
-            subtitle: item.subtitle,
-            time: item.time,
-            isCompleted: selectedTabIndex == 1,
-            isOverdue: selectedTabIndex == 2,
+          child: GestureDetector(
+            onLongPress: () => _deleteReminder(index),
+            child: _buildReminderCard(
+              date: item.date,
+              title: item.title,
+              subtitle: item.subtitle,
+              time: item.time,
+              isCompleted: selectedTabIndex == 1,
+              isOverdue: selectedTabIndex == 2,
+            ),
           ),
         );
       },
@@ -347,6 +351,95 @@ class _RemindersPageState extends State<RemindersPage> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addReminder() {
+    final _dateController = TextEditingController();
+    final _titleController = TextEditingController();
+    final _subtitleController = TextEditingController();
+    final _timeController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text("Add Reminder"),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _dateController,
+                decoration: InputDecoration(labelText: 'Date (e.g, 5th Aug)'),
+              ),
+              TextField(
+                controller: _titleController,
+                decoration: InputDecoration(labelText: 'Vaccine Name'),
+              ),
+              TextField(
+                controller: _subtitleController,
+                decoration: InputDecoration(labelText: 'Patient Name'),
+              ),
+              TextField(
+                controller: _timeController,
+                decoration: InputDecoration(labelText: 'Time (e.g., 10:00am)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (_dateController.text.isNotEmpty &&
+                  _titleController.text.isNotEmpty &&
+                  _subtitleController.text.isNotEmpty &&
+                  _timeController.text.isNotEmpty) {
+                setState(() {
+                  tabData[0]?.add(
+                    ReminderItem(
+                      date: _dateController.text,
+                      title: _titleController.text,
+                      subtitle: _subtitleController.text,
+                      time: _timeController.text,
+                    ),
+                  );
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: Text("Add"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteReminder(int index) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text("Delete Reminder"),
+        content: Text("Do you want to delete this reminder?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                tabData[selectedTabIndex]!.removeAt(index);
+              });
+              Navigator.pop(context);
+            },
+            child: Text("Delete"),
           ),
         ],
       ),

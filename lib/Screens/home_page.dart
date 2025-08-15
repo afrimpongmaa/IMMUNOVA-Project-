@@ -6,12 +6,18 @@ import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/reminders_page.dart';
 import 'package:immunova/Screens/setting_page.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_session.dart';
 
 class MedicalHomeScreen extends StatelessWidget {
   const MedicalHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final name = context.watch<UserSession>().displayName;
+    final greeting =
+        name == null || name.isEmpty ? 'WELCOME!' : 'WELCOME, ${name}!';
+
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
@@ -56,7 +62,7 @@ class MedicalHomeScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'WELCOME, Dr Faustina!',
+              greeting,
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
