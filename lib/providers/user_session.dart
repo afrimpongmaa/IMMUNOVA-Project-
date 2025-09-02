@@ -27,20 +27,41 @@ class UserSession extends ChangeNotifier {
 
   Future<bool> signInLocal(String employeeIdOrUsername, String password) async {
     try {
+      print('DEBUG - Attempting login with Employee ID: $employeeIdOrUsername');
       final users =
           await _db.queryByIndex('users', 'employee_id', employeeIdOrUsername);
-      if (users.isEmpty) return false;
+      print('DEBUG - Found ${users.length} users with that Employee ID');
+      
+      if (users.isEmpty) {
+        print('DEBUG - No users found with Employee ID: $employeeIdOrUsername');
+        return false;
+      }
+      
       final user = users.first;
+      print('DEBUG - Found user: ${user['full_name']} (ID: ${user['local_id']})');
+      print('DEBUG - Full user object: $user');
+      
       final stored = (user['password'] ?? '') as String;
+      print('DEBUG - Stored password: "$stored"');
+      print('DEBUG - Entered password: "$password"');
+      print('DEBUG - Password comparison: stored.length=${stored.length}, entered.length=${password.length}');
+      print('DEBUG - Are passwords equal? ${stored == password}');
+      
       if (stored == password) {
+        print('DEBUG - Password match! Logging in user.');
         _currentUser = user;
         final prefs = await SharedPreferences.getInstance();
         await prefs.setInt('current_local_user_id', user['local_id'] as int);
+        print('DEBUG - Session saved to SharedPreferences');
         notifyListeners();
+        print('DEBUG - Listeners notified, returning true');
         return true;
+      } else {
+        print('DEBUG - Password mismatch!');
+        return false;
       }
-      return false;
-    } catch (_) {
+    } catch (e) {
+      print('DEBUG - Error during sign-in: $e');
       return false;
     }
   }

@@ -145,7 +145,13 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               _buildTextField(
                 controller: _patientNameController,
                 label: 'Patient Name',
-                hint: '',
+                hint: 'Enter patient name',
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Patient name is required';
+                  }
+                  return null;
+                },
               ),
               SizedBox(height: 16),
               _buildTextField(
@@ -155,6 +161,17 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                 suffixIcon: Icons.calendar_today,
                 readOnly: true,
                 onTap: () => _selectDate(context),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Date of birth is required';
+                  }
+                  try {
+                    DateTime.parse(value);
+                  } catch (e) {
+                    return 'Invalid date format';
+                  }
+                  return null;
+                },
               ),
               SizedBox(height: 16),
               _buildDropdownField(
@@ -360,6 +377,16 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
   }
 
   void _savePatientRecord() async {
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please fill in all required fields'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     try {
       final currentLocalId =
           Provider.of<UserSession>(context, listen: false).localId;
@@ -367,17 +394,27 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         throw Exception('No signed-in user. Please sign in first.');
       }
 
+      print('DEBUG - Creating patient with:');
+      print('  Name: ${_patientNameController.text}');
+      print('  DOB: ${_dobController.text}');
+      print('  Gender: $_selectedGender');
+      print('  User ID: $currentLocalId');
+
       final patient = Patient(
         patientId: DateTime.now().millisecondsSinceEpoch.toString(),
         docId: currentLocalId,
         name: _patientNameController.text,
         dob: DateTime.parse(_dobController.text),
         gender: _selectedGender ?? 'M',
-        guardianName: _emergencyContactController.text,
-        guardianNum: _guardianNumberController.text,
+        guardianName: _emergencyContactController.text.isEmpty ? null : _emergencyContactController.text,
+        guardianNum: _guardianNumberController.text.isEmpty ? null : _guardianNumberController.text,
       );
 
+      print('DEBUG - Patient object: ${patient.toMap()}');
+
       final patientLocalId = await _db.insert('patients', patient.toMap());
+      
+      print('DEBUG - Patient saved with local ID: $patientLocalId');
 
       // Save immunization records and track latest immunization date
       DateTime? latest;
@@ -388,6 +425,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
           try {
             parsedDate = DateTime.parse(record.dateController.text);
           } catch (e) {
+            print('DEBUG - Error parsing immunization date: $e');
             parsedDate = null;
           }
           if (parsedDate != null) {
@@ -402,6 +440,8 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
               dose: record.doseController.text,
               status: 'Immunized',
             );
+            
+            print('DEBUG - Saving immunization: ${immunization.toMap()}');
             await _db.insert('immunizations', immunization.toMap());
           }
         }
@@ -455,6 +495,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     TextInputType? keyboardType,
     bool readOnly = false,
     VoidCallback? onTap,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -473,6 +514,7 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
           keyboardType: keyboardType,
           readOnly: readOnly,
           onTap: onTap,
+          validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             suffixIcon: suffixIcon != null
@@ -494,20 +536,6 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
             ),
             contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'This field is required';
-            }
-            // Only validate date format for DOB field
-            if (label == 'Date of Birth') {
-              try {
-                DateTime.parse(value);
-              } catch (_) {
-                return 'Enter a valid date (YYYY-MM-DD)';
-              }
-            }
-            return null;
-          },
         ),
       ],
     );

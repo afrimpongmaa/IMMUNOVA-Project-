@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'providers/user_session.dart';
-import 'screens/onboarding_screen.dart';
+import 'Screens/onboarding_screen.dart';
 import 'database/database_helper.dart';
 
 void main() async {
@@ -19,6 +19,22 @@ void main() async {
     if (!isInitialized) {
       await dbHelper.database;
       print('Database initialized successfully');
+    }
+    
+    // Check if we need to create a default test user
+    final existingUsers = await dbHelper.getAll('users');
+    if (existingUsers.isEmpty) {
+      print('No users found, creating test user...');
+      final testUser = {
+        'full_name': 'Test Doctor',
+        'phone_number': '+1234567890',
+        'employee_id': 'test123',
+        'password': 'password',
+        'hospital_name': 'Test Hospital',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+      await dbHelper.insert('users', testUser);
+      print('Test user created - Employee ID: test123, Password: password');
     }
   } catch (e) {
     print('Error initializing database: $e');

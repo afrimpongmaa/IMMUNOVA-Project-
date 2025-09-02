@@ -10,6 +10,11 @@ class DoctorProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = context.watch<UserSession>();
     final user = session.currentUser;
+    
+    // Debug: Print current session state
+    print('DEBUG - Current user: $user');
+    print('DEBUG - Local ID: ${session.localId}');
+    
     final name = (user?['full_name'] ?? 'User') as String;
     final phone = (user?['phone_number'] ?? '-') as String;
     final hospital = (user?['hospital_name'] ?? 'LOCAL') as String;

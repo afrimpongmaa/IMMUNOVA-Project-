@@ -5,6 +5,7 @@ import 'package:immunova/Screens/login_screen.dart';
 import 'package:immunova/Screens/onboarding_screen.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
+import 'package:immunova/Screens/debug_users.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_session.dart';
 import '../database/database_helper.dart';
@@ -154,6 +155,17 @@ class _SettingsPageState extends State<SettingsPage> {
                             backgroundColor: Color(0xFF4ECDC4)),
                       );
                     },
+                  );
+                },
+              ),
+              _buildDivider(),
+              _buildMenuItem(
+                icon: Icons.bug_report,
+                title: 'Debug: View All Users',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const DebugUsersScreen()),
                   );
                 },
               ),
