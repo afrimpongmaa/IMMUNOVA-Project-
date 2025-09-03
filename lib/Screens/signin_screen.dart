@@ -20,15 +20,36 @@ class _SignInScreenState extends State<SignInScreen> {
 
   Future<void> _signIn() async {
     if (!_formKey.currentState!.validate()) return;
+    
+    print('DEBUG - SignIn: Starting sign-in process');
+    print('DEBUG - SignIn: Employee ID: "${_employeeIdCtrl.text.trim()}"');
+    print('DEBUG - SignIn: Password: "${_passwordCtrl.text}"');
+    
     setState(() => _loading = true);
     final session = Provider.of<UserSession>(context, listen: false);
+    
+    print('DEBUG - SignIn: Calling session.signInLocal()');
     final success = await session.signInLocal(
         _employeeIdCtrl.text.trim(), _passwordCtrl.text);
+    
+    print('DEBUG - SignIn: signInLocal returned: $success');
     setState(() => _loading = false);
+    
     if (success) {
-      Navigator.pushReplacement(context,
-          MaterialPageRoute(builder: (_) => const MedicalHomeScreen()));
+      print('DEBUG - SignIn: Success! Navigating to home...');
+      try {
+        // Alternative navigation approach
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const MedicalHomeScreen()),
+          (route) => false,
+        );
+        print('DEBUG - SignIn: Navigation completed successfully');
+      } catch (e) {
+        print('DEBUG - SignIn: Navigation error: $e');
+      }
     } else {
+      print('DEBUG - SignIn: Failed! Showing error message...');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Invalid credentials or local account not found')),

@@ -117,13 +117,27 @@ class DatabaseHelper {
     final store = txn.objectStore(storeName);
     final index = store.index(indexName);
     final List<Map<String, dynamic>> results = [];
-    await for (final cursor in index.openCursor(range: key == null ? null : KeyRange.only(key))) {
-      if (cursor.value is Map) {
-        results.add(Map<String, dynamic>.from(cursor.value as Map));
+    
+    print('DEBUG - Querying store: $storeName, index: $indexName, key: $key');
+    
+    try {
+      await for (final cursor in index.openCursor(range: key == null ? null : KeyRange.only(key))) {
+        if (cursor.value is Map) {
+          final result = Map<String, dynamic>.from(cursor.value as Map);
+          print('DEBUG - Found record: $result');
+          results.add(result);
+        }
       }
+      
+      print('DEBUG - Cursor iteration completed');
+      // Remove the txn.completed await for readonly transactions
+      
+      print('DEBUG - Total results found: ${results.length}');
+      return results;
+    } catch (e) {
+      print('DEBUG - Error in queryByIndex: $e');
+      return results;
     }
-    await txn.completed;
-    return results;
   }
 
   Future<void> delete(String storeName, int localId) async {
