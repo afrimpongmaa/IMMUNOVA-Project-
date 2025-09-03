@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "expo-file-system": "^18.1.11",
+    "expo-sqlite": "^15.2.14"
+  }
+}

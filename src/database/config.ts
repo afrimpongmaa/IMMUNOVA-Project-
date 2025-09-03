@@ -1,9 +1,8 @@
+// src/database/config.ts
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system';
-import { Asset } from 'expo-asset';
 
 const DB_NAME = 'immunova.db';
-const MIGRATIONS_PATH = '../db/migrations/sqlite';
 
 // Database will be stored in app's documents directory
 export const getDatabasePath = async () => {
@@ -12,39 +11,44 @@ export const getDatabasePath = async () => {
 };
 
 export const initDatabase = async () => {
-  const dbPath = await getDatabasePath();
-  
-  // Ensure SQLite directory exists
-  const dbDirectory = `${FileSystem.documentDirectory}SQLite`;
-  const { exists } = await FileSystem.getInfoAsync(dbDirectory);
-  if (!exists) {
-    await FileSystem.makeDirectoryAsync(dbDirectory, { intermediates: true });
-  }
-
-  // Check if database exists
-  const dbExists = await FileSystem.getInfoAsync(dbPath);
-  if (!dbExists.exists) {
-    // Copy initial database from assets if it doesn't exist
-    try {
-      const migrationFile = require.resolve(MIGRATIONS_PATH + '/001_initial_schema.sql');
-      const sqlContent = await FileSystem.readAsStringAsync(migrationFile);
+  try {
+    // For expo-sqlite v11+ (current version) - Use openDatabaseAsync
+    const db = await SQLite.openDatabaseAsync(DB_NAME);
+    
+    // Run initial schema creation using execAsync
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
       
-      const db = SQLite.openDatabase(DB_NAME);
-      await new Promise((resolve, reject) => {
-        db.transaction(tx => {
-          tx.executeSql(sqlContent, [], 
-            () => resolve(true),
-            (_, error) => reject(error)
-          );
-        });
-      });
+      CREATE TABLE IF NOT EXISTS vaccines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
       
-      console.log('Database initialized successfully');
-    } catch (error) {
-      console.error('Error initializing database:', error);
-      throw error;
-    }
+      CREATE TABLE IF NOT EXISTS user_vaccines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        vaccine_id INTEGER NOT NULL,
+        date_administered DATE,
+        notes TEXT,
+        FOREIGN KEY (user_id) REFERENCES users (id),
+        FOREIGN KEY (vaccine_id) REFERENCES vaccines (id)
+      );
+    `);
+    
+    console.log('Database initialized successfully');
+    return db;
+    
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
   }
-
-  return SQLite.openDatabase(DB_NAME);
 };
+
+
