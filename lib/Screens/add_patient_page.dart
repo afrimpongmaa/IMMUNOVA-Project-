@@ -1,36 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
 import 'package:immunova/Screens/setting_page.dart';
-import 'package:provider/provider.dart';
-
-import '../database/database_helper.dart';
-import '../models/patient.dart';
-import '../models/immunization.dart';
-import '../providers/user_session.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // added
+import 'package:immunova/widgets/success_modal.dart'; // added
+import 'package:immunova/services/sync_service.dart';
 
 class ImmunizationRecord {
-  final TextEditingController vaccineNameController = TextEditingController();
+  String? vaccineId; // selected vaccine_id from Supabase
+  // ...existing code...
   final TextEditingController dateController = TextEditingController();
-  final TextEditingController doseController = TextEditingController();
-
+  String? dose; // '1st' | '2nd' | '3rd' | '4th' | '5th' | 'Booster'
   void dispose() {
-    vaccineNameController.dispose();
+    // ...existing code...
     dateController.dispose();
-    doseController.dispose();
   }
 }
 
 class AddPatientScreen extends StatefulWidget {
   const AddPatientScreen({super.key});
-
   @override
   State<AddPatientScreen> createState() => _AddPatientScreenState();
 }
 
 class _AddPatientScreenState extends State<AddPatientScreen> {
-  final DatabaseHelper _db = DatabaseHelper();
   final _formKey = GlobalKey<FormState>();
 
   final TextEditingController _patientNameController = TextEditingController();
@@ -48,75 +43,223 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     ImmunizationRecord(),
   ];
 
+  // Vaccines state
+  List<Map<String, String>> _vaccines = [];
+  bool _loadingVaccines = true;
+  String? _vaccinesError;
+
+  // Dose options
+  final List<String> _doseOptions = const [
+    '1st',
+    '2nd',
+    '3rd',
+    '4th',
+    '5th',
+    'Booster',
+  ];
+
+  // NEW: entry modes and existing patients
+  final List<String> _entryModes = const ['Existing patient', 'New patient'];
+  String _entryMode = 'Existing patient';
+  List<Map<String, String>> _doctorPatients = [];
+  bool _loadingPatients = true;
+  String? _patientsError;
+  String? _selectedExistingPatientId;
+
   int selectedBottomNavIndex = 2;
 
-  // Add this method for showing the date picker
-  Future<void> _selectDate(BuildContext context) async {
-    DateTime initialDate =
-        DateTime.now().subtract(const Duration(days: 365 * 5));
-    DateTime firstDate = DateTime(1900);
-    DateTime lastDate = DateTime.now();
+  @override
+  void initState() {
+    super.initState();
+    _loadVaccines();
+    _loadDoctorPatients(); // NEW
+  }
 
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-    );
-    if (picked != null) {
+  Future<void> _loadVaccines() async {
+    setState(() {
+      _loadingVaccines = true;
+      _vaccinesError = null;
+    });
+    try {
+      final res = await Supabase.instance.client
+          .from('vaccines')
+          .select('id, vaccine_name')
+          .order('vaccine_name');
+      final list = (res as List)
+          .map(
+            (e) => {
+              'id': e['id'] as String,
+              'name': e['vaccine_name'] as String,
+            },
+          )
+          .toList();
+      if (!mounted) return;
       setState(() {
-        _dobController.text =
-            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        _vaccines = list;
+        _loadingVaccines = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vaccinesError = 'Failed to load vaccines';
+        _loadingVaccines = false;
       });
     }
   }
 
-  // Add method for immunization date picker
-  Future<void> _selectImmunizationDate(BuildContext context, int index) async {
-    DateTime initialDate = DateTime.now();
-    DateTime firstDate = DateTime(1900);
-    DateTime lastDate = DateTime.now();
-
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: firstDate,
-      lastDate: lastDate,
-    );
-    if (picked != null) {
+  // NEW: load existing patients for this doctor
+  Future<void> _loadDoctorPatients() async {
+    setState(() {
+      _loadingPatients = true;
+      _patientsError = null;
+    });
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) {
+        setState(() {
+          _doctorPatients = [];
+          _loadingPatients = false;
+        });
+        return;
+      }
+      final res = await Supabase.instance.client
+          .from('patient_records')
+          .select('patient_id, name')
+          .eq('doc_id', uid)
+          .order('updated_at', ascending: false);
+      final list = (res as List)
+          .map(
+            (e) => {
+              'id': e['patient_id'] as String,
+              'name': (e['name'] as String).trim(),
+            },
+          )
+          .toList();
+      if (!mounted) return;
       setState(() {
-        _immunizationRecords[index].dateController.text =
-            "${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}";
+        _doctorPatients = list;
+        _loadingPatients = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _patientsError = 'Failed to load patients';
+        _loadingPatients = false;
       });
     }
+  }
+
+  // Helper: map UI gender to DB expected 'M'/'F'
+  String? _mapGender(String? gender) {
+    if (gender == null) return null;
+    if (gender.toLowerCase().startsWith('m')) return 'M';
+    if (gender.toLowerCase().startsWith('f')) return 'F';
+    return null; // invalid for schema
+  }
+
+  // Helper: parse DD/MM/YYYY or YYYY-MM-DD to YYYY-MM-DD
+  String? _normalizeDate(String raw) {
+    final s = raw.trim();
+    if (s.isEmpty) return null;
+    final ddmmyyyy = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$');
+    final m = ddmmyyyy.firstMatch(s);
+    if (m != null) {
+      final d = m.group(1)!;
+      final mo = m.group(2)!;
+      final y = m.group(3)!;
+      return '$y-$mo-$d';
+    }
+    // Try direct ISO parse
+    try {
+      final dt = DateTime.parse(s);
+      return dt.toIso8601String().split('T').first;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Date helpers
+  Future<void> _pickDate(
+    TextEditingController controller, {
+    DateTime? initialDate,
+    required DateTime firstDate,
+    required DateTime lastDate,
+  }) async {
+    final parsed = _tryParseIsoDate(controller.text);
+    final now = DateTime.now();
+    final init = initialDate ?? parsed ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: init.isBefore(firstDate) || init.isAfter(lastDate)
+          ? firstDate
+          : init,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'Select date',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(primary: Color(0xFF4ECDC4)),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      controller.text = _formatIsoDate(picked);
+    }
+  }
+
+  DateTime? _tryParseIsoDate(String v) {
+    try {
+      if (v.trim().isEmpty) return null;
+      return DateTime.parse(v);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _formatIsoDate(DateTime d) {
+    final mm = d.month.toString().padLeft(2, '0');
+    final dd = d.day.toString().padLeft(2, '0');
+    return '${d.year}-$mm-$dd';
   }
 
   @override
   Widget build(BuildContext context) {
-    final session = Provider.of<UserSession>(context);
-    final doctorName = session.displayName ?? 'Doctor';
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8FFFE),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0F9FF),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: IconButton(
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              color: Color(0xFF4ECDC4),
+              size: 18,
+            ),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
         title: Text(
-          'ADD PATIENT • ${doctorName}',
-          style: const TextStyle(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
+          'ADD PATIENT',
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF2D3748),
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
           ),
         ),
         centerTitle: true,
         actions: [
           Container(
-            margin: EdgeInsets.only(right: 16),
+            margin: const EdgeInsets.only(right: 16),
             child: GestureDetector(
               onTap: () => Navigator.push(
                 context,
@@ -124,10 +267,19 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
                   builder: (context) => const DoctorProfileScreen(),
                 ),
               ),
-              child: CircleAvatar(
-                backgroundColor: Color(0xFF4ECDC4),
-                radius: 18,
-                child: Icon(Icons.person, color: Colors.white, size: 20),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF4ECDC4), Color(0xFF44B3A3)],
+                  ),
+                ),
+                child: const CircleAvatar(
+                  backgroundColor: Colors.white,
+                  radius: 16,
+                  child: Icon(Icons.person, color: Color(0xFF4ECDC4), size: 20),
+                ),
               ),
             ),
           ),
@@ -136,143 +288,739 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          padding: EdgeInsets.all(20),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader('PERSONAL DETAILS'),
-              SizedBox(height: 16),
-              _buildTextField(
-                controller: _patientNameController,
-                label: 'Patient Name',
-                hint: 'Enter patient name',
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Patient name is required';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 16),
-              _buildTextField(
-                controller: _dobController,
-                label: 'Date of Birth',
-                hint: 'YYYY-MM-DD',
-                suffixIcon: Icons.calendar_today,
-                readOnly: true,
-                onTap: () => _selectDate(context),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Date of birth is required';
-                  }
-                  try {
-                    DateTime.parse(value);
-                  } catch (e) {
-                    return 'Invalid date format';
-                  }
-                  return null;
-                },
-              ),
-              SizedBox(height: 16),
-              _buildDropdownField(
-                label: 'Gender',
-                value: _selectedGender,
-                items: _genderOptions,
-                onChanged: (value) {
-                  setState(() {
-                    _selectedGender = value;
-                  });
-                },
-              ),
-              SizedBox(height: 32),
-              _buildSectionHeader('CONTACT INFORMATION'),
-              SizedBox(height: 16),
-              _buildTextField(
-                controller: _emergencyContactController,
-                label: 'Parent or Guardian\'s Name',
-                hint: '',
-              ),
-              SizedBox(height: 16),
-              _buildTextField(
-                controller: _guardianNumberController,
-                label: 'Guardian\'s Phone Number',
-                hint: '',
-              ),
-              SizedBox(height: 32),
-              _buildSectionHeader('IMMUNIZATION SCHEDULE'),
-              SizedBox(height: 16),
-              ..._immunizationRecords.asMap().entries.map((entry) {
-                int index = entry.key;
-                ImmunizationRecord record = entry.value;
-                return Column(
-                  children: [
-                    _buildImmunizationInputCard(record, index),
-                    if (index < _immunizationRecords.length - 1)
-                      SizedBox(height: 16),
-                  ],
-                );
-              }).toList(),
-              SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: _addImmunizationRecord,
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: Color(0xFF4ECDC4)),
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add, color: Color(0xFF4ECDC4)),
-                      SizedBox(width: 8),
-                      Text(
-                        'Add Immunization Record',
-                        style: TextStyle(
-                          color: Color(0xFF4ECDC4),
-                          fontWeight: FontWeight.w600,
+              // NEW: Action chooser
+              _buildSectionCard(
+                title: 'ACTION',
+                icon: Icons.swap_horiz,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _entryMode,
+                    items: _entryModes
+                        .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      _entryMode = v!;
+                    }),
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 40),
-              Container(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    if (_formKey.currentState!.validate()) {
-                      _savePatientRecord();
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF4ECDC4),
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    'Save Patient Record',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1,
+                        ),
+                      ),
+                      focusedBorder: const OutlineInputBorder(
+                        borderRadius: BorderRadius.all(Radius.circular(8)),
+                        borderSide: BorderSide(
+                          color: Color(0xFF4ECDC4),
+                          width: 1,
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 16),
+                  if (_entryMode == 'Existing patient')
+                    _buildExistingPatientDropdown(), // NEW
+                ],
               ),
+
+              const SizedBox(height: 24),
+
+              // Show new-patient form only when needed (collapsed by default via mode)
+              if (_entryMode == 'New patient') ...[
+                _buildSectionCard(
+                  title: 'PERSONAL DETAILS',
+                  icon: Icons.person_outline,
+                  children: [
+                    _buildTextField(
+                      controller: _patientNameController,
+                      label: 'Patient Name',
+                      hint: 'Enter full name',
+                      prefixIcon: Icons.person,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _dobController,
+                      label: 'Date of Birth',
+                      hint: 'YYYY-MM-DD',
+                      suffixIcon: Icons.calendar_today,
+                      prefixIcon: Icons.cake,
+                      readOnly: true,
+                      onTap: () => _pickDate(
+                        _dobController,
+                        firstDate: DateTime(1900, 1, 1),
+                        lastDate: DateTime.now(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDropdownField(
+                      label: 'Gender',
+                      value: _selectedGender,
+                      items: _genderOptions,
+                      onChanged: (value) =>
+                          setState(() => _selectedGender = value),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _buildSectionCard(
+                  title: 'CONTACT INFORMATION',
+                  icon: Icons.contact_phone_outlined,
+                  children: [
+                    _buildTextField(
+                      controller: _emergencyContactController,
+                      label: 'Parent or Guardian\'s Name',
+                      hint: 'Enter guardian name',
+                      prefixIcon: Icons.family_restroom,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _guardianNumberController,
+                      label: 'Guardian\'s Phone Number',
+                      hint: '+233 000 000 000',
+                      prefixIcon: Icons.phone,
+                      keyboardType: TextInputType.phone,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+              ],
+
+              _buildSectionCard(
+                title: 'IMMUNIZATION RECORDS',
+                icon: Icons.vaccines_outlined,
+                children: [
+                  // ...existing immunization rows...
+                  ..._immunizationRecords.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final record = entry.value;
+                    return Column(
+                      children: [
+                        _buildImmunizationInputCard(record, index),
+                        if (index < _immunizationRecords.length - 1)
+                          const SizedBox(height: 16),
+                      ],
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                  _buildAddButton(),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+              _buildSaveButton(),
+              const SizedBox(height: 100),
             ],
           ),
         ),
       ),
       bottomNavigationBar: _buildBottomNavigationBar(),
     );
+  }
+
+  // NEW: Existing patient dropdown (doctor-scoped)
+  Widget _buildExistingPatientDropdown() {
+    if (_loadingPatients) {
+      return Row(
+        children: const [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text('Loading patients...'),
+        ],
+      );
+    }
+    if (_patientsError != null) {
+      return Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _patientsError!,
+              style: const TextStyle(color: Colors.red),
+            ),
+          ),
+          TextButton(
+            onPressed: _loadDoctorPatients,
+            child: const Text('Retry'),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Select patient',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF2D3748),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: _selectedExistingPatientId,
+          isExpanded: true,
+          items: _doctorPatients
+              .map(
+                (p) =>
+                    DropdownMenuItem(value: p['id'], child: Text(p['name']!)),
+              )
+              .toList(),
+          onChanged: (v) => setState(() => _selectedExistingPatientId = v),
+          validator: (v) =>
+              (_entryMode == 'Existing patient' && (v == null || v.isEmpty))
+              ? 'Select a patient'
+              : null,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            prefixIcon: const Icon(
+              Icons.people,
+              color: Color(0xFF4ECDC4),
+              size: 20,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4ECDC4).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: const Color(0xFF4ECDC4), size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF2D3748),
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    IconData? suffixIcon,
+    IconData? prefixIcon,
+    TextInputType? keyboardType,
+    bool readOnly = false, // added
+    VoidCallback? onTap, // added
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF2D3748),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextFormField(
+            controller: controller,
+            keyboardType: readOnly
+                ? TextInputType.none
+                : keyboardType, // prevent keyboard for dates
+            readOnly: readOnly,
+            onTap: onTap,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: GoogleFonts.poppins(
+                color: Colors.grey[400],
+                fontSize: 14,
+              ),
+              prefixIcon: prefixIcon != null
+                  ? Icon(prefixIcon, color: const Color(0xFF4ECDC4), size: 20)
+                  : null,
+              suffixIcon: suffixIcon != null
+                  ? Icon(suffixIcon, color: Colors.grey[400], size: 20)
+                  : null,
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(
+                  color: Color(0xFF4ECDC4),
+                  width: 2,
+                ),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return 'This field is required';
+              }
+              return null;
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String? value,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF2D3748),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: value,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 1),
+            ),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+          items: items.map((String item) {
+            return DropdownMenuItem<String>(value: item, child: Text(item));
+          }).toList(),
+          onChanged: onChanged,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select an option';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddButton() {
+    return Container(
+      width: double.infinity,
+      height: 48,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFF4ECDC4), width: 1.5),
+        borderRadius: BorderRadius.circular(12),
+        color: const Color(0xFF4ECDC4).withOpacity(0.05),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: _addImmunizationRecord,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.add_circle_outline,
+                color: Color(0xFF4ECDC4),
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Add Immunization Record',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF4ECDC4),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ); // close outer Container
+  }
+
+  Widget _buildSaveButton() {
+    return Container(
+      width: double.infinity,
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4ECDC4), Color(0xFF44B3A3)],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF4ECDC4).withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: () {
+          if (_formKey.currentState!.validate()) {
+            _savePatientRecord();
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        child: Text(
+          'Save Patient Record',
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImmunizationInputCard(ImmunizationRecord record, int index) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FFFE),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF4ECDC4).withOpacity(0.2),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF4ECDC4),
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Immunization Record ${index + 1}',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF2D3748),
+                ),
+              ),
+              const Spacer(),
+              if (_immunizationRecords.length > 1)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: IconButton(
+                    onPressed: () => _removeImmunizationRecord(index),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.red,
+                      size: 18,
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Vaccine dropdown
+          _buildVaccineDropdown(record),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTextField(
+                  controller: record.dateController,
+                  label: 'Date Due',
+                  hint: 'YYYY-MM-DD',
+                  suffixIcon: Icons.calendar_today,
+                  prefixIcon: Icons.event,
+                  readOnly: true,
+                  onTap: () => _pickDate(
+                    record.dateController,
+                    firstDate: DateTime(2000, 1, 1),
+                    lastDate: DateTime(2100, 12, 31),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(child: _buildDoseDropdown(record)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVaccineDropdown(ImmunizationRecord record) {
+    if (_loadingVaccines) {
+      return Row(
+        children: const [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 8),
+          Text('Loading vaccines...'),
+        ],
+      );
+    }
+    if (_vaccinesError != null) {
+      return Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(_vaccinesError!, style: TextStyle(color: Colors.red)),
+          ),
+          TextButton(onPressed: _loadVaccines, child: const Text('Retry')),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Vaccine',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF2D3748),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: record.vaccineId,
+          isExpanded: true,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            prefixIcon: const Icon(
+              Icons.vaccines,
+              color: Color(0xFF4ECDC4),
+              size: 20,
+            ),
+          ),
+          items: _vaccines
+              .map(
+                (v) => DropdownMenuItem<String>(
+                  value: v['id'],
+                  child: Text(v['name']!),
+                ),
+              )
+              .toList(),
+          onChanged: (val) => setState(() => record.vaccineId = val),
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Select a vaccine' : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDoseDropdown(ImmunizationRecord record) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Dose',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF2D3748),
+          ),
+        ),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<String>(
+          value: record.dose,
+          isExpanded: true,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[200]!, width: 1),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(12)),
+              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            prefixIcon: const Icon(
+              Icons.medical_services,
+              color: Color(0xFF4ECDC4),
+              size: 20,
+            ),
+          ),
+          items: _doseOptions
+              .map((d) => DropdownMenuItem<String>(value: d, child: Text(d)))
+              .toList(),
+          onChanged: (val) => setState(() => record.dose = val),
+          validator: (v) => (v == null || v.isEmpty) ? 'Select a dose' : null,
+        ),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _patientNameController.dispose();
+    _dobController.dispose();
+    _emergencyContactController.dispose();
+    _guardianNumberController.dispose();
+    for (var record in _immunizationRecords) {
+      record.dispose();
+    }
+    super.dispose();
   }
 
   Widget _buildBottomNavigationBar() {
@@ -282,7 +1030,12 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: const Color.fromRGBO(
+              128,
+              128,
+              128,
+              0.1,
+            ), // was Colors.grey.withOpacity(0.1)
             spreadRadius: 1,
             blurRadius: 5,
             offset: Offset(0, -3),
@@ -376,306 +1129,200 @@ class _AddPatientScreenState extends State<AddPatientScreen> {
     }
   }
 
-  void _savePatientRecord() async {
-    if (!_formKey.currentState!.validate()) {
+  // Save handler now supports both entry modes
+  Future<void> _savePatientRecord() async {
+    final supa = Supabase.instance.client;
+    final uid = supa.auth.currentUser?.id;
+    if (uid == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please fill in all required fields'),
+        const SnackBar(
+          content: Text('You must be signed in to save'),
           backgroundColor: Colors.red,
         ),
       );
       return;
     }
 
-    try {
-      final currentLocalId =
-          Provider.of<UserSession>(context, listen: false).localId;
-      if (currentLocalId == null) {
-        throw Exception('No signed-in user. Please sign in first.');
-      }
+    // Build immunizations (require vaccine + dose; date may be required by your validator)
+    final List<Map<String, dynamic>> immunizations = [];
+    for (final rec in _immunizationRecords) {
+      if (rec.vaccineId == null || (rec.dose == null || rec.dose!.isEmpty))
+        continue;
+      final dueIso = rec.dateController.text.trim().isEmpty
+          ? null
+          : _normalizeDate(rec.dateController.text.trim());
+      immunizations.add({
+        'vaccine_id': rec.vaccineId,
+        'date_due': dueIso,
+        'dose': rec.dose,
+        'status': 'pending',
+      });
+    }
 
-      print('DEBUG - Creating patient with:');
-      print('  Name: ${_patientNameController.text}');
-      print('  DOB: ${_dobController.text}');
-      print('  Gender: $_selectedGender');
-      print('  User ID: $currentLocalId');
-
-      final patient = Patient(
-        patientId: DateTime.now().millisecondsSinceEpoch.toString(),
-        docId: currentLocalId,
-        name: _patientNameController.text,
-        dob: DateTime.parse(_dobController.text),
-        gender: _selectedGender ?? 'M',
-        guardianName: _emergencyContactController.text.isEmpty ? null : _emergencyContactController.text,
-        guardianNum: _guardianNumberController.text.isEmpty ? null : _guardianNumberController.text,
-      );
-
-      print('DEBUG - Patient object: ${patient.toMap()}');
-
-      final patientLocalId = await _db.insert('patients', patient.toMap());
-      
-      print('DEBUG - Patient saved with local ID: $patientLocalId');
-
-      // Save immunization records and track latest immunization date
-      DateTime? latest;
-      for (var record in _immunizationRecords) {
-        if (record.vaccineNameController.text.isNotEmpty &&
-            record.dateController.text.isNotEmpty) {
-          DateTime? parsedDate;
-          try {
-            parsedDate = DateTime.parse(record.dateController.text);
-          } catch (e) {
-            print('DEBUG - Error parsing immunization date: $e');
-            parsedDate = null;
-          }
-          if (parsedDate != null) {
-            if (latest == null || parsedDate.isAfter(latest)) {
-              latest = parsedDate;
-            }
-
-            final immunization = Immunization(
-              patientId: patientLocalId,
-              vaccineId: 1, // Replace with actual vaccine ID mapping
-              dateTaken: parsedDate,
-              dose: record.doseController.text,
-              status: 'Immunized',
-            );
-            
-            print('DEBUG - Saving immunization: ${immunization.toMap()}');
-            await _db.insert('immunizations', immunization.toMap());
-          }
-        }
-      }
-
-      // Update patient's last_time_immunized if we found a date
-      if (latest != null) {
-        final updatedPatientMap = patient.toMap();
-        updatedPatientMap['last_time_immunized'] = latest.toIso8601String();
-        await _db.update('patients', updatedPatientMap, patientLocalId);
-      }
-
+    if (immunizations.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Patient record saved successfully!'),
-          backgroundColor: Color(0xFF4ECDC4),
-        ),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const PatientRecords()),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving patient record: $e'),
+        const SnackBar(
+          content: Text('Add at least one immunization record'),
           backgroundColor: Colors.red,
         ),
       );
+      return;
     }
-  }
 
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        color: Colors.grey[600],
-        letterSpacing: 1.0,
-      ),
-    );
-  }
+  try {
+      String? patientId;
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    IconData? suffixIcon,
-    TextInputType? keyboardType,
-    bool readOnly = false,
-    VoidCallback? onTap,
-    String? Function(String?)? validator,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey[700],
-          ),
-        ),
-        SizedBox(height: 8),
-        TextFormField(
-          controller: controller,
-          keyboardType: keyboardType,
-          readOnly: readOnly,
-          onTap: onTap,
-          validator: validator,
-          decoration: InputDecoration(
-            hintText: hint,
-            suffixIcon: suffixIcon != null
-                ? Icon(suffixIcon, color: Colors.grey[400], size: 20)
-                : null,
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+      if (_entryMode == 'Existing patient') {
+        // Validate chosen patient
+        if (_selectedExistingPatientId == null ||
+            _selectedExistingPatientId!.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please select a patient'),
+              backgroundColor: Colors.red,
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 1),
-            ),
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-        ),
-      ],
-    );
-  }
+          );
+          return;
+        }
+        patientId = _selectedExistingPatientId;
 
-  Widget _buildDropdownField({
-    required String label,
-    required String? value,
-    required List<String> items,
-    required Function(String?) onChanged,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Colors.grey[700],
-          ),
-        ),
-        SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          value: value,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
+        // Insert immunizations for existing patient
+        await supa
+            .from('immunization_records')
+            .insert(
+              immunizations
+                  .map((m) => {'patient_id': patientId, ...m})
+                  .toList(),
+            );
+      } else {
+        // Validate new patient fields
+        final name = _patientNameController.text.trim();
+        final dobIso = _normalizeDate(_dobController.text);
+        final genderChar = _mapGender(_selectedGender);
+        if (name.isEmpty || dobIso == null || genderChar == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please complete name, valid DOB, and gender.'),
+              backgroundColor: Colors.red,
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey[300]!, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Color(0xFF4ECDC4), width: 1),
-            ),
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-          items: items.map((String item) {
-            return DropdownMenuItem<String>(value: item, child: Text(item));
-          }).toList(),
-          onChanged: onChanged,
-          validator: (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please select an option';
-            }
-            return null;
+          );
+          return;
+        }
+
+        // Create patient first
+        final patientRow = await supa
+            .from('patient_records')
+            .insert({
+              'doc_id': uid,
+              'name': name,
+              'dob': dobIso,
+              'gender': genderChar,
+              'guardian_name': _emergencyContactController.text.trim(),
+              'guardian_num': _guardianNumberController.text.trim(),
+              'emergency_contact_number':
+                  _guardianNumberController.text.trim().isEmpty
+                  ? null
+                  : _guardianNumberController.text.trim(),
+            })
+            .select('patient_id')
+            .single();
+
+        patientId = patientRow['patient_id'] as String?;
+        if (patientId == null) throw Exception('Failed to create patient');
+
+        await supa
+            .from('immunization_records')
+            .insert(
+              immunizations
+                  .map((m) => {'patient_id': patientId, ...m})
+                  .toList(),
+            );
+      }
+
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => SuccessModal(
+          title: 'Record Saved',
+          message: _entryMode == 'Existing patient'
+              ? 'Immunization records have been added.'
+              : 'Patient and immunization records have been saved.',
+          onClose: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const PatientRecords()),
+            );
           },
         ),
-      ],
-    );
-  }
+      );
+    } on PostgrestException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      // Likely offline: enqueue for background sync
+      try {
+        if (_entryMode == 'Existing patient') {
+          await SyncService.instance.enqueue(
+            'immunization_records',
+            'insert_for_patient',
+            {
+              'patient_id': _selectedExistingPatientId,
+              'records': immunizations,
+            },
+          );
+        } else {
+          final name = _patientNameController.text.trim();
+          final dobIso = _normalizeDate(_dobController.text);
+          final genderChar = _mapGender(_selectedGender);
+          await SyncService.instance.enqueue(
+            'patient_records',
+            'create_with_immunizations',
+            {
+              'patient': {
+                'doc_id': uid,
+                'name': name,
+                'dob': dobIso,
+                'gender': genderChar,
+                'guardian_name': _emergencyContactController.text.trim(),
+                'guardian_num': _guardianNumberController.text.trim(),
+                'emergency_contact_number':
+                    _guardianNumberController.text.trim().isEmpty
+                        ? null
+                        : _guardianNumberController.text.trim(),
+              },
+              'immunizations': immunizations,
+            },
+          );
+        }
 
-  Widget _buildImmunizationInputCard(ImmunizationRecord record, int index) {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey[300]!, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: Color(0xFF4ECDC4),
-                  shape: BoxShape.circle,
-                ),
-              ),
-              SizedBox(width: 12),
-              Text(
-                'Immunization Record ${index + 1}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                ),
-              ),
-              Spacer(),
-              if (_immunizationRecords.length > 1)
-                IconButton(
-                  onPressed: () => _removeImmunizationRecord(index),
-                  icon: Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                  padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(),
-                ),
-            ],
+        if (!mounted) return;
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => SuccessModal(
+            title: 'Saved locally',
+            message:
+                'You seem offline. Changes will sync automatically when back online.',
+            onClose: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const PatientRecords()),
+              );
+            },
           ),
-          SizedBox(height: 16),
-          _buildTextField(
-            controller: record.vaccineNameController,
-            label: 'Vaccine Name',
-            hint: 'e.g., BCG, Hepatitis B, DPT',
+        );
+      } catch (_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save'),
+            backgroundColor: Colors.red,
           ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _buildTextField(
-                  controller: record.dateController,
-                  label: 'Date Taken',
-                  hint: 'YYYY-MM-DD',
-                  suffixIcon: Icons.calendar_today,
-                  readOnly: true,
-                  onTap: () => _selectImmunizationDate(context, index),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: _buildTextField(
-                  controller: record.doseController,
-                  label: 'Dose',
-                  hint: 'e.g., 1st, 2nd, Booster',
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _patientNameController.dispose();
-    _dobController.dispose();
-    _emergencyContactController.dispose();
-    _guardianNumberController.dispose();
-    for (var record in _immunizationRecords) {
-      record.dispose();
+        );
+      }
     }
-    super.dispose();
   }
+
+  // ...existing code (build methods, dropdowns, etc.)...
 }

@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:immunova/Screens/add_patient_page.dart';
 import 'package:immunova/Screens/educational_resources.dart';
 import 'package:immunova/Screens/login_screen.dart';
 import 'package:immunova/Screens/onboarding_screen.dart';
 import 'package:immunova/Screens/patient_records.dart';
 import 'package:immunova/Screens/profile.dart';
-import 'package:immunova/Screens/debug_users.dart';
-import 'package:provider/provider.dart';
-import '../providers/user_session.dart';
-import '../database/database_helper.dart';
-import 'signin_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -21,51 +18,58 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool pushNotifications = true;
   bool immunizationReminders = true;
-  int selectedBottomNavIndex = 3;
+  int selectedBottomNavIndex = 3; // Settings is selected by default
 
-  final TextEditingController _nameController = TextEditingController(text: '');
-  final TextEditingController _phoneController =
-      TextEditingController(text: '');
+  // User data controllers (start empty; fill from Supabase)
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _currentPasswordController =
       TextEditingController();
   final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  final DatabaseHelper _db = DatabaseHelper();
+  bool _loadingProfile = true;
 
   @override
   void initState() {
     super.initState();
-    // Load current user data into controllers after first frame
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final session = context.read<UserSession>();
-      final user = session.currentUser;
-      if (user != null) {
-        _nameController.text = (user['full_name'] ?? '') as String;
-        _phoneController.text = (user['phone_number'] ?? '') as String;
-        setState(() {});
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid != null) {
+        final data = await Supabase.instance.client
+            .from('users')
+            .select('full_name, phone_number')
+            .eq('id', uid)
+            .single();
+        _nameController.text = (data['full_name'] as String?)?.trim() ?? '';
+        _phoneController.text = (data['phone_number'] as String?)?.trim() ?? '';
       }
-    });
+    } catch (_) {
+      // ignore errors; keep fields as-is
+    } finally {
+      if (mounted) setState(() => _loadingProfile = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final session = context.watch<UserSession>();
-    final user = session.currentUser;
-
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8FFFE),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         title: Text(
           'SETTINGS',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.0,
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF2D3748),
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
           ),
         ),
         centerTitle: true,
@@ -73,236 +77,282 @@ class _SettingsPageState extends State<SettingsPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // Profile Section
+            // Enhanced Profile Section
             Container(
               width: double.infinity,
-              color: Colors.white,
-              padding: EdgeInsets.all(20),
+              margin: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    backgroundColor: Color(0xFF4ECDC4),
-                    radius: 25,
-                    child: Icon(Icons.person, color: Colors.white, size: 30),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF4ECDC4), Color(0xFF44B3A3)],
+                      ),
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        color: Color(0xFF4ECDC4),
+                        size: 28,
+                      ),
+                    ),
                   ),
-                  SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _nameController.text.isEmpty
-                            ? (user?['full_name'] ?? 'User')
-                            : _nameController.text,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black,
-                        ),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        (user?['hospital_name'] ?? 'LOCAL').toString(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.grey[600],
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      SizedBox(height: 6),
-                      GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  const DoctorProfileScreen()),
-                        ),
-                        child: Text(
-                          'View Profile',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF4ECDC4),
-                            fontWeight: FontWeight.w500,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _loadingProfile
+                              ? 'Loading...'
+                              : (_nameController.text.isEmpty
+                                    ? 'Doctor'
+                                    : _nameController.text),
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF2D3748),
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4ECDC4).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'EXTENDED',
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF4ECDC4),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DoctorProfileScreen(),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                'View Profile',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: const Color(0xFF4ECDC4),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.arrow_forward_ios,
+                                size: 12,
+                                color: Color(0xFF4ECDC4),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
             ),
 
-            SizedBox(height: 16),
+            // Enhanced settings sections
+            _buildEnhancedSectionContainer(
+              title: 'Account Settings',
+              icon: Icons.manage_accounts_outlined,
+              children: [
+                _buildMenuItem(
+                  icon: Icons.person_outline,
+                  title: 'Change Name',
+                  subtitle: 'Update your display name',
+                  onTap: () {
+                    _showEditDialog(
+                      title: 'Change Name',
+                      fieldLabel: 'Full Name',
+                      controller: _nameController,
+                      successMessage: 'Name updated locally',
+                    );
+                    // Note: Persisting to DB can be added later via an update call.
+                  },
+                ),
+                _buildDivider(),
+                _buildMenuItem(
+                  icon: Icons.phone_outlined,
+                  title: 'Change Phone Number',
+                  subtitle: 'Update contact information',
+                  onTap: () {
+                    _showEditDialog(
+                      title: 'Change Phone Number',
+                      fieldLabel: 'Phone Number',
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      prefixText: '+233 ',
+                      successMessage: 'Phone number updated locally',
+                    );
+                  },
+                ),
+                _buildDivider(),
+                _buildMenuItem(
+                  icon: Icons.lock_outline,
+                  title: 'Change Password',
+                  subtitle: 'Update your password',
+                  onTap: () {
+                    _showChangePasswordDialog();
+                  },
+                ),
+              ],
+            ),
 
-            // Account Settings Section
-            _buildSectionContainer([
-              _buildSectionHeader('ACCOUNT SETTINGS'),
-              _buildMenuItem(
-                icon: Icons.person_outline,
-                title: 'Change Name',
-                onTap: () {
-                  _showEditDialog(
-                    title: 'Change Name',
-                    fieldLabel: 'Full Name',
-                    controller: _nameController,
-                    successMessage: 'Name updated successfully',
-                    onSave: () async {
-                      await _updateUserField(
-                          'full_name', _nameController.text.trim());
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Name updated successfully'),
-                            backgroundColor: Color(0xFF4ECDC4)),
-                      );
-                    },
-                  );
-                },
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                icon: Icons.bug_report,
-                title: 'Debug: View All Users',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const DebugUsersScreen()),
-                  );
-                },
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                icon: Icons.phone_outlined,
-                title: 'Change Phone Number',
-                onTap: () {
-                  _showEditDialog(
-                    title: 'Change Phone Number',
-                    fieldLabel: 'Phone Number',
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    successMessage: 'Phone number updated successfully',
-                    onSave: () async {
-                      await _updateUserField(
-                          'phone_number', _phoneController.text.trim());
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Phone number updated successfully'),
-                            backgroundColor: Color(0xFF4ECDC4)),
-                      );
-                    },
-                  );
-                },
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                icon: Icons.lock_outline,
-                title: 'Change Password',
-                onTap: () {
-                  _showChangePasswordDialog();
-                },
-              ),
-            ]),
+            _buildEnhancedSectionContainer(
+              title: 'Notifications',
+              icon: Icons.notifications_outlined,
+              children: [
+                _buildToggleItem(
+                  icon: Icons.notifications_active_outlined,
+                  title: 'Push Notifications',
+                  subtitle: 'Get notified about important updates',
+                  value: pushNotifications,
+                  onChanged: (value) {
+                    setState(() {
+                      pushNotifications = value;
+                    });
+                  },
+                ),
+                _buildDivider(),
+                _buildToggleItem(
+                  icon: Icons.medical_services_outlined,
+                  title: 'Immunization Reminders',
+                  subtitle: 'Receive vaccination reminders',
+                  value: immunizationReminders,
+                  onChanged: (value) {
+                    setState(() {
+                      immunizationReminders = value;
+                    });
+                  },
+                ),
+              ],
+            ),
 
-            SizedBox(height: 16),
+            _buildEnhancedSectionContainer(
+              title: 'Support & Legal',
+              icon: Icons.help_outline,
+              children: [
+                _buildMenuItem(
+                  icon: Icons.privacy_tip_outlined,
+                  title: 'Privacy Policy',
+                  subtitle: 'How we protect your data',
+                  onTap: () {
+                    _showInfoDialog(
+                      title: 'Privacy Policy',
+                      content:
+                          'Our privacy policy outlines how we collect, use, and protect your personal information. We are committed to maintaining the confidentiality and security of your data.',
+                    );
+                  },
+                ),
+                _buildDivider(),
+                _buildMenuItem(
+                  icon: Icons.description_outlined,
+                  title: 'Terms of Service',
+                  subtitle: 'Service agreement and terms',
+                  onTap: () {
+                    _showInfoDialog(
+                      title: 'Terms of Service',
+                      content:
+                          'By using our application, you agree to comply with our terms of service. These terms govern your use of our platform and services.',
+                    );
+                  },
+                ),
+                _buildDivider(),
+                _buildMenuItem(
+                  icon: Icons.support_agent,
+                  title: 'Contact Support',
+                  subtitle: 'Get help when you need it',
+                  onTap: () {
+                    _showContactSupportDialog();
+                  },
+                ),
+              ],
+            ),
 
-            // Notifications Section
-            _buildSectionContainer([
-              _buildSectionHeader('NOTIFICATIONS'),
-              _buildToggleItem(
-                icon: Icons.notifications_outlined,
-                title: 'Push Notifications',
-                value: pushNotifications,
-                onChanged: (value) {
-                  setState(() {
-                    pushNotifications = value;
-                  });
-                },
-              ),
-              _buildDivider(),
-              _buildToggleItem(
-                icon: Icons.medical_services_outlined,
-                title: 'Immunization Reminders',
-                value: immunizationReminders,
-                onChanged: (value) {
-                  setState(() {
-                    immunizationReminders = value;
-                  });
-                },
-              ),
-            ]),
+            const SizedBox(height: 24),
 
-            SizedBox(height: 16),
-
-            // Legal & Support Section
-            _buildSectionContainer([
-              _buildSectionHeader('LEGAL & SUPPORT'),
-              _buildMenuItem(
-                icon: Icons.privacy_tip_outlined,
-                title: 'Privacy Policy',
-                onTap: () {
-                  _showInfoDialog(
-                    title: 'Privacy Policy',
-                    content:
-                        'Our privacy policy outlines how we collect, use, and protect your personal information. We are committed to maintaining the confidentiality and security of your data.',
-                  );
-                },
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                icon: Icons.description_outlined,
-                title: 'Terms of Service',
-                onTap: () {
-                  _showInfoDialog(
-                    title: 'Terms of Service',
-                    content:
-                        'By using our application, you agree to comply with our terms of service. These terms govern your use of our platform and services.',
-                  );
-                },
-              ),
-              _buildDivider(),
-              _buildMenuItem(
-                icon: Icons.help_outline,
-                title: 'Contact Support',
-                onTap: () {
-                  _showContactSupportDialog();
-                },
-              ),
-            ]),
-
-            SizedBox(height: 32),
-
-            // Logout Button
+            // Enhanced Logout Button
             Container(
-              margin: EdgeInsets.symmetric(horizontal: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 20),
               width: double.infinity,
+              height: 56,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  colors: [Colors.red.shade400, Colors.red.shade600],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
               child: ElevatedButton(
                 onPressed: () async {
-                  await context.read<UserSession>().signOut();
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const SignInScreen()),
-                    (r) => false,
+                  await Supabase.instance.client.auth.signOut();
+                  if (!mounted) return;
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const OnboardingScreen()),
+                    (route) => false,
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  padding: EdgeInsets.symmetric(vertical: 16),
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.logout, color: Colors.white, size: 18),
-                    SizedBox(width: 8),
+                    const Icon(Icons.logout, color: Colors.white, size: 20),
+                    const SizedBox(width: 12),
                     Text(
                       'LOG OUT',
-                      style: TextStyle(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
-                        fontSize: 14,
+                        fontSize: 16,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 1.0,
+                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
@@ -310,15 +360,19 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
 
-            SizedBox(height: 16),
+            const SizedBox(height: 24),
 
             // Version info
             Text(
-              'Version 1.0.0 Build 123456789',
-              style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+              'Version 1.0.0',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[400],
+                fontWeight: FontWeight.w400,
+              ),
             ),
 
-            SizedBox(height: 100), // Add space for bottom navigation
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -326,43 +380,53 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Future<void> _updateUserField(String key, String value) async {
-    final session = context.read<UserSession>();
-    final user = session.currentUser;
-    if (user == null) return;
-    final localId = user['local_id'] as int;
-    final updated = Map<String, dynamic>.from(user);
-    updated[key] = value;
-    await _db.update('users', updated, localId);
-    await session.loadFromPrefs(); // refresh session
-    setState(() {}); // refresh UI
-  }
-
-  Widget _buildSectionContainer(List<Widget> children) {
+  Widget _buildEnhancedSectionContainer({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.only(left: 20, right: 20, bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey[600],
-          letterSpacing: 0.5,
-        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4ECDC4).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: const Color(0xFF4ECDC4), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF2D3748),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...children,
+        ],
       ),
     );
   }
@@ -370,38 +434,59 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
+    required String subtitle,
     required VoidCallback onTap,
     bool showArrow = true,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
-          children: [
-            Container(
-              padding: EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Color(0xFF4ECDC4).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color.fromRGBO(78, 205, 196, 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: const Color(0xFF4ECDC4), size: 20),
               ),
-              child: Icon(icon, color: Color(0xFF4ECDC4), size: 20),
-            ),
-            SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black,
-                  fontWeight: FontWeight.w500,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        color: const Color(0xFF2D3748),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            if (showArrow)
-              Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),
-          ],
+              if (showArrow)
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  color: Colors.grey,
+                  size: 16,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -410,32 +495,57 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget _buildToggleItem({
     required IconData icon,
     required String title,
+    required String subtitle,
     required bool value,
     required Function(bool) onChanged,
   }) {
     return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey[600], size: 20),
-          SizedBox(width: 16),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color.fromRGBO(78, 205, 196, 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: const Color(0xFF4ECDC4), size: 20),
+          ),
+          const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.black,
-                fontWeight: FontWeight.w400,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    color: const Color(0xFF2D3748),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
             ),
           ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: Color(0xFF4ECDC4),
-            activeTrackColor: Color(0xFF4ECDC4).withOpacity(0.3),
-            inactiveThumbColor: Colors.grey[400],
-            inactiveTrackColor: Colors.grey[300],
+          Transform.scale(
+            scale: 0.8,
+            child: Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: const Color(0xFF4ECDC4),
+              activeTrackColor: const Color.fromRGBO(78, 205, 196, 0.3),
+              inactiveThumbColor: Colors.grey[400],
+              inactiveTrackColor: Colors.grey[300],
+            ),
           ),
         ],
       ),
@@ -563,7 +673,12 @@ class _SettingsPageState extends State<SettingsPage> {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Color(0xFF4ECDC4).withOpacity(0.1),
+                  color: const Color.fromRGBO(
+                    78,
+                    205,
+                    196,
+                    0.1,
+                  ), // was withOpacity(0.1)
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(Icons.edit, color: Color(0xFF4ECDC4), size: 20),
@@ -700,7 +815,12 @@ class _SettingsPageState extends State<SettingsPage> {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Color(0xFF4ECDC4).withOpacity(0.1),
+                  color: const Color.fromRGBO(
+                    78,
+                    205,
+                    196,
+                    0.1,
+                  ), // was withOpacity(0.1)
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -778,7 +898,12 @@ class _SettingsPageState extends State<SettingsPage> {
               Container(
                 padding: EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Color(0xFF4ECDC4).withOpacity(0.1),
+                  color: const Color.fromRGBO(
+                    78,
+                    205,
+                    196,
+                    0.1,
+                  ), // was withOpacity(0.1)
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -834,7 +959,12 @@ class _SettingsPageState extends State<SettingsPage> {
               Container(
                 padding: EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Color(0xFF4ECDC4).withOpacity(0.1),
+                  color: const Color.fromRGBO(
+                    78,
+                    205,
+                    196,
+                    0.1,
+                  ), // was withOpacity(0.1)
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(

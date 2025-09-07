@@ -1,200 +1,141 @@
-import 'package:idb_shim/idb.dart';
-import 'package:idb_shim/idb_browser.dart' if (dart.library.io) 'package:idb_shim/idb_io.dart';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
+/// Lightweight local DB for offline queueing and caching small datasets.
 class DatabaseHelper {
-  static final DatabaseHelper _instance = DatabaseHelper._internal();
-  static IdbFactory? _idbFactory;
-  static Database? _database;
-  static const String dbName = 'immunova_db';
-  static const int dbVersion = 1;
+	static final DatabaseHelper instance = DatabaseHelper._internal();
+	DatabaseHelper._internal();
 
-  factory DatabaseHelper() => _instance;
+		Database? _db;
+		static const _webKey = 'pending_ops_web';
 
-  DatabaseHelper._internal() {
-    if (kIsWeb) {
-      _idbFactory = idbFactoryBrowser;
-    }
-  }
+		Future<Database> get database async {
+			if (kIsWeb) {
+				throw UnsupportedError('sqflite not available on web');
+			}
+			if (_db != null) return _db!;
+			_db = await _initDB('immunova_local.db');
+			return _db!;
+		}
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDatabase();
-    return _database!;
-  }
+	Future<Database> _initDB(String fileName) async {
+		final dbPath = await getDatabasesPath();
+		final path = p.join(dbPath, fileName);
+		return await openDatabase(
+			path,
+			version: 1,
+			onCreate: (db, version) async {
+				// Generic pending operations queue. Each row is a mutation envelope.
+				await db.execute('''
+					CREATE TABLE IF NOT EXISTS pending_ops (
+						id INTEGER PRIMARY KEY AUTOINCREMENT,
+						scope TEXT NOT NULL,              -- e.g., "user_bio", "patient", "immunization"
+						op TEXT NOT NULL,                 -- e.g., "upsert", "insert", "update", "delete"
+						payload TEXT NOT NULL,            -- JSON string with the data to push
+						created_at INTEGER NOT NULL,      -- epoch millis
+						retry_count INTEGER NOT NULL DEFAULT 0
+					);
+				''');
+				// Optional small caches can be added here later (e.g., hospitals cache)
+			},
+		);
+	}
 
-  Future<Database> _initDatabase() async {
-    if (_idbFactory == null) {
-      throw Exception('IndexedDB not supported in this environment');
-    }
+	Future<int> enqueueOp({
+		required String scope,
+		required String op,
+		required Map<String, dynamic> payload,
+	}) async {
+			if (kIsWeb) {
+				final prefs = await SharedPreferences.getInstance();
+				final now = DateTime.now().millisecondsSinceEpoch;
+				final list = (prefs.getStringList(_webKey) ?? []);
+				final id = list.length + 1; // simple local id
+				final entry = jsonEncode({
+					'id': id,
+					'scope': scope,
+					'op': op,
+					'payload': payload,
+					'created_at': now,
+					'retry_count': 0,
+				});
+				list.add(entry);
+				await prefs.setStringList(_webKey, list);
+				return id;
+			} else {
+				final db = await database;
+				return await db.insert('pending_ops', {
+					'scope': scope,
+					'op': op,
+					'payload': jsonEncode(payload),
+					'created_at': DateTime.now().millisecondsSinceEpoch,
+					'retry_count': 0,
+				});
+			}
+	}
 
-    // Use dbVersion constant
-    return await _idbFactory!.open(dbName,
-      version: dbVersion,
-      onUpgradeNeeded: (VersionChangeEvent event) {
-        final db = event.database;
+	Future<List<Map<String, dynamic>>> getPendingOps({int limit = 50}) async {
+			if (kIsWeb) {
+				final prefs = await SharedPreferences.getInstance();
+				final list = (prefs.getStringList(_webKey) ?? []);
+				final decoded = list
+						.map((s) => jsonDecode(s) as Map<String, dynamic>)
+						.toList()
+					..sort((a, b) => (a['created_at'] as int)
+							.compareTo(b['created_at'] as int));
+				return decoded.take(limit).toList();
+			} else {
+				final db = await database;
+				final rows = await db.query(
+					'pending_ops',
+					orderBy: 'created_at ASC, id ASC',
+					limit: limit,
+				);
+				return rows
+						.map((r) => {
+									...r,
+									'payload': jsonDecode(r['payload'] as String),
+								})
+						.toList();
+			}
+	}
 
-        // Create stores if they don't exist
-        if (!db.objectStoreNames.contains('patients')) {
-          final patientsStore = db.createObjectStore('patients',
-              keyPath: 'local_id', autoIncrement: true);
-          patientsStore.createIndex('remote_id', 'remote_id', unique: true);
-          patientsStore.createIndex('doc_id', 'doc_id', unique: false);
-        }
+	Future<void> deleteOp(int id) async {
+			if (kIsWeb) {
+				final prefs = await SharedPreferences.getInstance();
+				final list = (prefs.getStringList(_webKey) ?? []);
+				list.removeWhere((s) => (jsonDecode(s) as Map<String, dynamic>)['id'] == id);
+				await prefs.setStringList(_webKey, list);
+			} else {
+				final db = await database;
+				await db.delete('pending_ops', where: 'id = ?', whereArgs: [id]);
+			}
+	}
 
-        if (!db.objectStoreNames.contains('immunizations')) {
-          final immunizationsStore = db.createObjectStore('immunizations',
-              keyPath: 'local_id', autoIncrement: true);
-          immunizationsStore.createIndex(
-              'patient_id', 'patient_id', unique: false);
-          immunizationsStore.createIndex(
-              'vaccine_id', 'vaccine_id', unique: false);
-        }
-
-        if (!db.objectStoreNames.contains('vaccines')) {
-          final vaccinesStore = db.createObjectStore('vaccines',
-              keyPath: 'local_id', autoIncrement: true);
-          vaccinesStore.createIndex('name', 'name', unique: true);
-        }
-
-        if (!db.objectStoreNames.contains('notifications')) {
-          final notificationsStore = db.createObjectStore('notifications',
-              keyPath: 'local_id', autoIncrement: true);
-          notificationsStore.createIndex('user_id', 'user_id', unique: false);
-          notificationsStore.createIndex(
-              'patient_id', 'patient_id', unique: false);
-        }
-
-        if (!db.objectStoreNames.contains('user_settings')) {
-          final settingsStore = db.createObjectStore('user_settings',
-              keyPath: 'local_id', autoIncrement: true);
-          settingsStore.createIndex('user_id', 'user_id', unique: true);
-        }
-
-        if (!db.objectStoreNames.contains('users')) {
-          final usersStore = db.createObjectStore('users',
-              keyPath: 'local_id', autoIncrement: true);
-          usersStore.createIndex('remote_id', 'remote_id', unique: true);
-          usersStore.createIndex('employee_id', 'employee_id', unique: true);
-        }
-      });
-  }
-
-  // Helper methods (improved)
-  Future<int> insert(String storeName, Map<String, dynamic> data) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readwrite');
-    final store = txn.objectStore(storeName);
-
-    // If data already contains keyPath 'local_id' use put, otherwise add.
-    if (data.containsKey('local_id')) {
-      await store.put(data);
-      await txn.completed;
-      return data['local_id'] as int;
-    } else {
-      final id = await store.add(data);
-      await txn.completed;
-      // id could be num; ensure int
-      return (id is int) ? id : (id as num).toInt();
-    }
-  }
-
-  Future<Map<String, dynamic>?> getById(
-      String storeName, int localId) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readonly');
-    final store = txn.objectStore(storeName);
-    final record = await store.getObject(localId);
-    await txn.completed;
-    if (record == null) return null;
-    return Map<String, dynamic>.from(record as Map);
-  }
-
-  Future<List<Map<String, dynamic>>> queryByIndex(
-      String storeName, String indexName, dynamic key) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readonly');
-    final store = txn.objectStore(storeName);
-    final index = store.index(indexName);
-    final List<Map<String, dynamic>> results = [];
-    
-    print('DEBUG - Querying store: $storeName, index: $indexName, key: $key');
-    
-    try {
-      await for (final cursor in index.openCursor(range: key == null ? null : KeyRange.only(key))) {
-        if (cursor.value is Map) {
-          final result = Map<String, dynamic>.from(cursor.value as Map);
-          print('DEBUG - Found record: $result');
-          results.add(result);
-        }
-      }
-      
-      print('DEBUG - Cursor iteration completed');
-      // Remove the txn.completed await for readonly transactions
-      
-      print('DEBUG - Total results found: ${results.length}');
-      return results;
-    } catch (e) {
-      print('DEBUG - Error in queryByIndex: $e');
-      return results;
-    }
-  }
-
-  Future<void> delete(String storeName, int localId) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readwrite');
-    final store = txn.objectStore(storeName);
-    await store.delete(localId);
-    await txn.completed;
-  }
-
-  Future<void> update(String storeName, Map<String, dynamic> data, int localId) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readwrite');
-    final store = txn.objectStore(storeName);
-
-    // ensure keyPath is present for put
-    data['local_id'] = localId;
-    await store.put(data);
-    await txn.completed;
-  }
-  
-  // Add method to check if database is initialized
-  Future<bool> isDatabaseInitialized() async {
-    try {
-      final db = await database;
-      return db.objectStoreNames.contains('patients');
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Add method to reset database (useful for development)
-  Future<void> resetDatabase() async {
-    if (_database != null) {
-      _database!.close(); // close() is synchronous/void
-      _database = null;
-    }
-    if (_idbFactory != null) {
-      await _idbFactory!.deleteDatabase(dbName);
-    }
-  }
-
-  // Added: getAll - return all records from an object store as List<Map>
-  Future<List<Map<String, dynamic>>> getAll(String storeName) async {
-    final db = await database;
-    final txn = db.transaction(storeName, 'readonly');
-    final store = txn.objectStore(storeName);
-    final List<Map<String, dynamic>> results = [];
-
-    // iterate all records
-    await for (final cursor in store.openCursor(autoAdvance: true)) {
-      if (cursor.value is Map) {
-        results.add(Map<String, dynamic>.from(cursor.value as Map));
-      }
-    }
-
-    await txn.completed;
-    return results;
-  }
+	Future<void> incrementRetry(int id) async {
+			if (kIsWeb) {
+				final prefs = await SharedPreferences.getInstance();
+				final list = (prefs.getStringList(_webKey) ?? []);
+				final updated = list.map((s) {
+					final m = jsonDecode(s) as Map<String, dynamic>;
+					if (m['id'] == id) {
+						m['retry_count'] = (m['retry_count'] as int) + 1;
+						return jsonEncode(m);
+					}
+					return s;
+				}).toList();
+				await prefs.setStringList(_webKey, updated);
+			} else {
+				final db = await database;
+				await db.rawUpdate(
+					'UPDATE pending_ops SET retry_count = retry_count + 1 WHERE id = ?',
+					[id],
+				);
+			}
+	}
 }
+

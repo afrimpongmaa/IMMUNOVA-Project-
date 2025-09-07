@@ -126,23 +126,83 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
       ),
       body: Column(
         children: [
+          // New Hero Header
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF4ECDC4), Color(0xFF44B3A3)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Learn. Guide. Immunize.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.95),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Curated vaccine insights by age group.',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.85),
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search vaccines, topics...',
+                      prefixIcon: Icon(Icons.search, color: Color(0xFF4ECDC4)),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Category Tabs
           Container(
             color: Colors.white,
             child: Column(
               children: [
-                Container(
-                  height: 50,
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 44,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    padding: EdgeInsets.symmetric(horizontal: 40),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: categories.length,
-                    itemBuilder: (context, index) {
-                      return _buildCategoryTab(categories[index]);
-                    },
+                    itemBuilder: (context, index) =>
+                        _buildCategoryChip(categories[index]),
                   ),
                 ),
-                SizedBox(height: 20.0),
+                const SizedBox(height: 12),
                 Container(height: 1, color: Colors.grey[200]),
               ],
             ),
@@ -151,12 +211,12 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
           // Vaccine Cards
           Expanded(
             child: ListView.builder(
-              padding: EdgeInsets.all(20),
+              padding: const EdgeInsets.all(20),
               itemCount: vaccineData[selectedCategory]?.length ?? 0,
               itemBuilder: (context, index) {
                 final vaccine = vaccineData[selectedCategory]![index];
                 return Padding(
-                  padding: EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: _buildVaccineCard(vaccine, () {
                     _navigateToVaccineScreen(vaccine.routeName);
                   }),
@@ -171,75 +231,295 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
   }
 
   void _navigateToVaccineScreen(String routeName) {
-    Widget? targetScreen;
+    // Show loading indicator first
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4ECDC4)),
+        ),
+      ),
+    );
 
-    switch (routeName) {
-      case 'dtap':
-        targetScreen = DtapVaccineScreen();
-        break;
-      case 'polio':
-        targetScreen = PolioVaccineScreen();
-        break;
-      case 'bcg':
-        targetScreen = BcgVaccineScreen();
-        break;
-      case 'Meningococcal':
-        targetScreen = MenacwyVaccineScreen();
-        break;
-      case 'hepititis':
-        targetScreen = InfluenzaVaccineScreen();
-        break;
-      case 'hpv':
-        targetScreen = HpvVaccineScreen();
-        break;
-      case 'meningococcal':
-        targetScreen = CovidVaccineScreen();
-        break;
-      default:
-        // Fallback to a generic vaccine screen or show an error
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Screen for ${routeName} not yet implemented'),
-            backgroundColor: Colors.orange,
+    // Simulate loading delay for better UX
+    Future.delayed(const Duration(milliseconds: 500), () {
+      Navigator.pop(context); // Remove loading dialog
+
+      Widget? targetScreen;
+      String title = '';
+      String description = '';
+
+      switch (routeName) {
+        case 'dtap':
+          targetScreen = DtapVaccineScreen();
+          title = 'DTaP Vaccine';
+          description = 'Comprehensive guide to DTaP vaccination';
+          break;
+        case 'polio':
+          targetScreen = PolioVaccineScreen();
+          title = 'Polio Vaccine (IPV)';
+          description = 'Essential information about polio immunization';
+          break;
+        case 'bcg':
+          targetScreen = BcgVaccineScreen();
+          title = 'BCG Vaccine';
+          description = 'Tuberculosis prevention through BCG vaccination';
+          break;
+        case 'Meningococcal':
+          targetScreen = MenacwyVaccineScreen();
+          title = 'Meningococcal Vaccine';
+          description = 'Protection against meningococcal disease';
+          break;
+        case 'hepititis':
+          targetScreen = InfluenzaVaccineScreen();
+          title = 'Influenza Vaccine';
+          description = 'Annual flu protection guidelines';
+          break;
+        case 'hpv':
+          targetScreen = HpvVaccineScreen();
+          title = 'HPV Vaccine';
+          description = 'Human papillomavirus prevention';
+          break;
+        case 'meningococcal':
+          targetScreen = CovidVaccineScreen();
+          title = 'COVID-19 Vaccine';
+          description = 'Latest COVID-19 vaccination protocols';
+          break;
+        default:
+          _showVaccineInfoModal(routeName);
+          return;
+      }
+
+      // Show brief info modal before navigating
+      _showVaccinePreviewModal(title, description, () {
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) =>
+                targetScreen!,
+            transitionsBuilder:
+                (context, animation, secondaryAnimation, child) {
+                  const begin = Offset(1.0, 0.0);
+                  const end = Offset.zero;
+                  const curve = Curves.easeInOut;
+                  var tween = Tween(
+                    begin: begin,
+                    end: end,
+                  ).chain(CurveTween(curve: curve));
+                  return SlideTransition(
+                    position: animation.drive(tween),
+                    child: child,
+                  );
+                },
+            transitionDuration: const Duration(milliseconds: 300),
           ),
         );
-        return;
-    }
-
-    if (targetScreen != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => targetScreen!),
-      );
-    }
+      });
+    });
   }
 
-  Widget _buildCategoryTab(String category) {
-    final isSelected = selectedCategory == category;
+  void _showVaccinePreviewModal(
+    String title,
+    String description,
+    VoidCallback onProceed,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4ECDC4).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.vaccines,
+                size: 32,
+                color: Color(0xFF4ECDC4),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2D3748),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              description,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF4ECDC4)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      'Back',
+                      style: TextStyle(
+                        color: Color(0xFF4ECDC4),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      onProceed();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4ECDC4),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Continue Learning',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.arrow_forward, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
+  void _showVaccineInfoModal(String routeName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.construction,
+                size: 32,
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Coming Soon',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2D3748),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Detailed information for $routeName is being prepared. Check back soon!',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4ECDC4),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text(
+                  'Got it',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip(String category) {
+    final isSelected = selectedCategory == category;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedCategory = category;
-        });
-      },
+      onTap: () => setState(() => selectedCategory = category),
       child: Container(
-        margin: EdgeInsets.only(right: 12),
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Color(0xFF4ECDC4) : Colors.transparent,
+          color: isSelected ? const Color(0xFF4ECDC4) : Colors.grey[100],
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? Color(0xFF4ECDC4) : Colors.grey[300]!,
-            width: 1,
+            color: isSelected ? const Color(0xFF4ECDC4) : Colors.grey[300]!,
           ),
         ),
         child: Text(
           category,
           style: TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.white : Colors.grey[600],
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : Colors.grey[700],
           ),
         ),
       ),
@@ -247,133 +527,268 @@ class _EducationalResourcesPageState extends State<EducationalResourcesPage> {
   }
 
   Widget _buildVaccineCard(VaccineInfo vaccine, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 4,
-              offset: Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Age Group Icon
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      Icons.child_care,
-                      color: Colors.grey[600],
-                      size: 20,
-                    ),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 400),
+      builder: (context, value, child) => Transform.scale(
+        scale: 0.8 + (0.2 * value),
+        child: Opacity(
+          opacity: value,
+          child: GestureDetector(
+            onTap: onTap,
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white,
+                    const Color(0xFF4ECDC4).withOpacity(0.05),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 6),
                   ),
-                  SizedBox(width: 16),
-
-                  // Content
-                  Expanded(
+                ],
+                border: Border.all(
+                  color: const Color(0xFF4ECDC4).withOpacity(0.2),
+                  width: 1,
+                ),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              selectedCategory,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                                fontWeight: FontWeight.w500,
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    const Color(0xFF4ECDC4).withOpacity(0.8),
+                                    const Color(0xFF44B3A3),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF4ECDC4,
+                                    ).withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.vaccines,
+                                color: Colors.white,
+                                size: 24,
                               ),
                             ),
-                            Spacer(),
-                            if (vaccine.isRecommended)
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Top line with category and badge
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(
+                                            0xFF4ECDC4,
+                                          ).withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          selectedCategory,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(0xFF4ECDC4),
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (vaccine.isRecommended)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            gradient: const LinearGradient(
+                                              colors: [
+                                                Color(0xFF43A047),
+                                                Color(0xFF388E3C),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: const Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.verified,
+                                                color: Colors.white,
+                                                size: 12,
+                                              ),
+                                              SizedBox(width: 4),
+                                              Text(
+                                                'Recommended',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    vaccine.name,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF2D3748),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    vaccine.description,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4ECDC4).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: const Color(
+                                    0xFF4ECDC4,
+                                  ).withOpacity(0.3),
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.schedule,
+                                    size: 16,
+                                    color: Color(0xFF4ECDC4),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    vaccine.doses,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF2D3748),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF4ECDC4),
+                                    Color(0xFF44B3A3),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF4ECDC4,
+                                    ).withOpacity(0.3),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: onTap,
                                   borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  'Recommended',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
+                                  child: const Padding(
+                                    padding: EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Learn More',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        SizedBox(width: 6),
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 16,
+                                          color: Colors.white,
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
+                            ),
                           ],
-                        ),
-                        SizedBox(height: 8),
-
-                        // Vaccine Name
-                        Text(
-                          vaccine.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-
-                        // Description
-                        Text(
-                          vaccine.description,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey[600],
-                            height: 1.4,
-                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-
-              SizedBox(height: 16),
-
-              // Bottom Row
-              Row(
-                children: [
-                  Text(
-                    vaccine.doses,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
-                  ),
-                  Spacer(),
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.grey[400],
-                    size: 16,
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -8,8 +8,17 @@ class MenacwyVaccineScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
-        title: const Text('VACCINE INFORMATION'),
+        backgroundColor: Colors.white,
+        elevation: 0,
         centerTitle: true,
+        title: const Text(
+          'VACCINE INFORMATION',
+          style: TextStyle(
+            color: Color(0xFF2D3748),
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -107,31 +116,76 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      color: Colors.white,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+        border: Border.all(color: Colors.grey[200]!),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.vaccines),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF4ECDC4), Color(0xFF44B3A3)],
+                    ),
+                  ),
+                  child: const Icon(Icons.vaccines, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                      color: Color(0xFF2D3748),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            if (content.isNotEmpty) Text(content),
-            if (extraInfo != null) ...[const SizedBox(height: 12), extraInfo!],
+            if (content.isNotEmpty)
+              Text(
+                content,
+                style: TextStyle(
+                  color: Colors.grey[700],
+                  height: 1.5,
+                ),
+              ),
+            if (extraInfo != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4ECDC4).withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF4ECDC4).withOpacity(0.25),
+                  ),
+                ),
+                child: extraInfo!,
+              ),
+            ],
           ],
         ),
       ),
@@ -148,16 +202,25 @@ class _StatItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           value,
           style: const TextStyle(
-            fontSize: 25,
-            color: Color.fromRGBO(128, 255, 255, 100),
-            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: Color(0xFF4ECDC4),
+            fontWeight: FontWeight.w800,
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }

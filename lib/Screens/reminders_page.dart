@@ -1,354 +1,316 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
 
   @override
-  _RemindersPageState createState() => _RemindersPageState();
+  State<RemindersPage> createState() => _RemindersPageState();
 }
 
 class _RemindersPageState extends State<RemindersPage> {
-  int selectedTabIndex = 0;
+  final _client = Supabase.instance.client;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _items = [];
+  bool _onlyUnread = false;
+  bool _onlyCritical = false;
 
-  final Map<int, List<ReminderItem>> tabData = {
-    0: [
-      ReminderItem(
-        date: '23\nJuly',
-        title: 'Polio Vaccine(IPV)',
-        subtitle: 'Johnson Amoah',
-        time: '3:30pm',
-      ),
-      ReminderItem(
-        date: '23\nJuly',
-        title: 'DTaP Vaccine',
-        subtitle: 'Julina Owusu',
-        time: '1:30pm',
-      ),
-      ReminderItem(
-        date: '23\nJuly',
-        title: 'BCG (Bacillus Calmette-Guerin)',
-        subtitle: 'Keziah Amoateng',
-        time: '12:00pm',
-      ),
-    ],
-    1: [
-      ReminderItem(
-        date: '11\nJuly',
-        title: 'COVID-19 Vaccine',
-        subtitle: 'John Konedu',
-        time: '8:30am',
-      ),
-      ReminderItem(
-        date: '09\nJuly',
-        title: 'Influenza (Flu) Vaccine',
-        subtitle: 'Grace Painstil',
-        time: '11:30am',
-      ),
-      ReminderItem(
-        date: '01\nJuly',
-        title: 'Hepatitis B Vaccine',
-        subtitle: 'Kwesi Osei',
-        time: '04:00pm',
-      ),
-    ],
-    2: [
-      ReminderItem(
-        date: '03\nJuly',
-        title: 'Meningococcal (MenACWY)',
-        subtitle: 'Obeng Kwame',
-        time: '3:30pm',
-      ),
-      ReminderItem(
-        date: '13\nJuly',
-        title: 'Polio Vaccine(IPV)',
-        subtitle: 'Kelvin Asibey',
-        time: '1:00pm',
-      ),
-      ReminderItem(
-        date: '22\nJuly',
-        title: 'TdaP Vaccine',
-        subtitle: 'Greatness Boateng',
-        time: '12:00pm',
-      ),
-    ],
-  };
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      // Trigger mark-overdue on open (authenticated scope)
+      await _client.functions.invoke('mark-overdue', method: HttpMethod.post);
+
+      final rows = await _client
+          .from('notifications')
+          .select('id, patient_id, severity, content, created_at, read_at')
+          .order('created_at', ascending: false)
+          .limit(100);
+      final list = (rows as List).cast<Map<String, dynamic>>();
+      if (!mounted) return;
+      setState(() {
+        _items = list;
+        _loading = false;
+      });
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to load notifications';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _markAllRead() async {
+    try {
+      await _client
+          .from('notifications')
+          .update({'read_at': DateTime.now().toIso8601String()})
+          .isFilter('read_at', null);
+      await _refresh();
+    } catch (_) {}
+  }
+
+  Future<void> _markRead(String id) async {
+    try {
+      await _client
+          .from('notifications')
+          .update({'read_at': DateTime.now().toIso8601String()})
+          .eq('id', id);
+      setState(() {
+        final i = _items.indexWhere((e) => e['id'] == id);
+        if (i != -1) _items[i]['read_at'] = DateTime.now().toIso8601String();
+      });
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
+    final filtered = _items.where((n) {
+      final unread = n['read_at'] == null;
+      final critical = (n['severity'] as String?) == 'critical';
+      if (_onlyUnread && !unread) return false;
+      if (_onlyCritical && !critical) return false;
+      return true;
+    }).toList();
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8FFFE),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        title: Text(
-          'REMINDERS',
+        title: const Text(
+          'NOTIFICATIONS',
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFF2D3748),
             fontSize: 16,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 1.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
           ),
         ),
         centerTitle: true,
-        actions: selectedTabIndex == 0
-            ? [
-                GestureDetector(
-                  onTap: _addReminder,
-                  child: Container(
-                    margin: EdgeInsets.only(right: 16),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.cyan[300],
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.add, color: Colors.white, size: 20),
-                  ),
-                ),
-              ]
-            : [],
-      ),
-      body: Column(
-        children: [
-          // Tab Bar
-          Container(
-            color: Colors.white,
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildTab('UPCOMING', 0),
-                SizedBox(width: 20),
-                _buildTab('COMPLETED', 1),
-                SizedBox(width: 20),
-                _buildTab('OVERDUE', 2),
-              ],
+        actions: [
+          IconButton(
+            tooltip: _onlyUnread ? 'Show all' : 'Show unread',
+            onPressed: () => setState(() => _onlyUnread = !_onlyUnread),
+            icon: Icon(
+              _onlyUnread ? Icons.mark_email_read : Icons.mark_email_unread,
+              color: const Color(0xFF4ECDC4),
             ),
           ),
-
-          // Today Section
-          Container(
-            width: double.infinity,
-            color: Colors.white,
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Text(
-              _getSectionTitle(),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey[700],
-                letterSpacing: 1.2,
-              ),
+          IconButton(
+            tooltip: _onlyCritical ? 'Show all severities' : 'Show critical only',
+            onPressed: () => setState(() => _onlyCritical = !_onlyCritical),
+            icon: Icon(
+              Icons.warning_amber,
+              color: _onlyCritical ? Colors.red : const Color(0xFF4ECDC4),
             ),
           ),
-
-          // Reminders List
-          Expanded(
-            child: Container(color: Colors.white, child: _buildRemindersList()),
+          IconButton(
+            tooltip: 'Mark all as read',
+            onPressed: _markAllRead,
+            icon: const Icon(Icons.done_all, color: Color(0xFF4ECDC4)),
           ),
+          const SizedBox(width: 8),
         ],
       ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.red),
+                      const SizedBox(height: 8),
+                      Text(_error!, style: const TextStyle(color: Colors.red)),
+                      TextButton(onPressed: _refresh, child: const Text('Retry')),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: filtered.isEmpty
+                      ? ListView(
+                          children: const [
+                            SizedBox(height: 120),
+                            Icon(Icons.notifications_none, size: 64, color: Colors.grey),
+                            SizedBox(height: 8),
+                            Center(
+                              child: Text('No notifications',
+                                  style: TextStyle(color: Colors.grey)),
+                            ),
+                          ],
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final n = filtered[index];
+                            final critical = (n['severity'] as String?) == 'critical';
+                            final unread = n['read_at'] == null;
+                            final createdAt = n['created_at']?.toString();
+                            final ts = _fmtWhen(createdAt);
+                            return Dismissible(
+                              key: ValueKey(n['id'] as String),
+                              direction: unread ? DismissDirection.endToStart : DismissDirection.none,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.symmetric(horizontal: 20),
+                                color: Colors.green,
+                                child: const Icon(Icons.mark_email_read, color: Colors.white),
+                              ),
+                              confirmDismiss: (_) async {
+                                await _markRead(n['id'] as String);
+                                return false; // Don't remove the tile
+                              },
+                              child: _NotificationTile(
+                                content: (n['content'] as String?) ?? 'Notification',
+                                patientId: n['patient_id']?.toString(),
+                                timestamp: ts,
+                                critical: critical,
+                                unread: unread,
+                                onMarkRead: unread ? () => _markRead(n['id'] as String) : null,
+                              ),
+                            );
+                          },
+                        ),
+                ),
     );
   }
 
-  String _getSectionTitle() {
-    switch (selectedTabIndex) {
-      case 0:
-        return 'TODAY';
-      case 1:
-        return 'COMPLETED';
-      case 2:
-        return 'OVERDUE';
-      default:
-        return 'TODAY';
+  String _fmtWhen(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(iso).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 1) return 'just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      final d = dt.day.toString().padLeft(2, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      return '$d/$m ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return '';
     }
   }
+}
 
-  Widget _buildRemindersList() {
-    List<ReminderItem> currentItems = tabData[selectedTabIndex] ?? [];
+class _NotificationTile extends StatelessWidget {
+  final String content;
+  final String? patientId;
+  final String timestamp;
+  final bool critical;
+  final bool unread;
+  final VoidCallback? onMarkRead;
 
-    if (currentItems.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.notifications_none, size: 60, color: Colors.grey[400]),
-            SizedBox(height: 16),
-            Text(
-              'No reminders found',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey[600],
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+  const _NotificationTile({
+    required this.content,
+    required this.patientId,
+    required this.timestamp,
+    required this.critical,
+    required this.unread,
+    this.onMarkRead,
+  });
 
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(horizontal: 20),
-      itemCount: currentItems.length,
-      itemBuilder: (context, index) {
-        final item = currentItems[index];
-        return Padding(
-          padding: EdgeInsets.only(bottom: 50),
-          child: GestureDetector(
-            onLongPress: () => _deleteReminder(index),
-            child: _buildReminderCard(
-              date: item.date,
-              title: item.title,
-              subtitle: item.subtitle,
-              time: item.time,
-              isCompleted: selectedTabIndex == 1,
-              isOverdue: selectedTabIndex == 2,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildTab(String title, int index) {
-    bool isSelected = selectedTabIndex == index;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedTabIndex = index;
-        });
-      },
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.cyan[300] : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.white : Colors.grey[600],
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.5,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReminderCard({
-    required String date,
-    required String title,
-    required String subtitle,
-    required String time,
-    bool isCompleted = false,
-    bool isOverdue = false,
-  }) {
-    Color cardColor = Colors.white;
-    Color borderColor = Colors.grey[200]!;
-    Color dateBackgroundColor = Colors.transparent;
-
-    if (isCompleted) {
-      borderColor = Colors.green[200]!;
-    } else if (isOverdue) {
-      borderColor = Colors.red[200]!;
-    }
-
+  @override
+  Widget build(BuildContext context) {
+    final badgeColor = critical ? Colors.red : const Color(0xFF4ECDC4);
     return Container(
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
-            spreadRadius: 1,
-            blurRadius: 3,
-            offset: Offset(0, 1),
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Date Container
           Container(
-            width: 50,
-            height: 50,
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: dateBackgroundColor,
-              border: Border.all(color: Colors.grey[300]!),
-              borderRadius: BorderRadius.circular(8),
+              color: badgeColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Center(
-              child: Text(
-                date,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey[700],
-                  height: 1.2,
-                ),
-              ),
+            child: Icon(
+              critical ? Icons.warning_amber_rounded : Icons.notifications,
+              color: badgeColor,
             ),
           ),
-
-          SizedBox(width: 16),
-
-          // Content
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                SizedBox(height: 8),
                 Row(
                   children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 16,
-                      color: isOverdue ? Colors.red[400] : Colors.grey[500],
+                    Expanded(
+                      child: Text(
+                        content,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2D3748),
+                        ),
+                      ),
                     ),
-                    SizedBox(width: 4),
                     Text(
-                      time,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isOverdue ? Colors.red[400] : Colors.grey[600],
-                      ),
+                      timestamp,
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                     ),
-                    if (isOverdue) ...[
-                      SizedBox(width: MediaQuery.sizeOf(context).width * .5),
-                      Icon(
-                        Icons.warning_rounded,
-                        size: 16,
-                        color: Colors.red[400],
-                      ),
-                    ],
-                    if (isCompleted) ...[
-                      SizedBox(width: MediaQuery.sizeOf(context).width * .5),
-                      Icon(
-                        Icons.check_circle,
-                        size: 16,
-                        color: Colors.green[400],
-                      ),
-                    ],
                   ],
                 ),
+                if (patientId != null && patientId!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.badge_outlined, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Patient: $patientId',
+                          style: const TextStyle(color: Colors.grey),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (unread) ...[
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: onMarkRead,
+                      icon: const Icon(Icons.mark_email_read, size: 18),
+                      label: const Text('Mark as read'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -356,107 +318,5 @@ class _RemindersPageState extends State<RemindersPage> {
       ),
     );
   }
-
-  void _addReminder() {
-    final _dateController = TextEditingController();
-    final _titleController = TextEditingController();
-    final _subtitleController = TextEditingController();
-    final _timeController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text("Add Reminder"),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _dateController,
-                decoration: InputDecoration(labelText: 'Date (e.g, 5th Aug)'),
-              ),
-              TextField(
-                controller: _titleController,
-                decoration: InputDecoration(labelText: 'Vaccine Name'),
-              ),
-              TextField(
-                controller: _subtitleController,
-                decoration: InputDecoration(labelText: 'Patient Name'),
-              ),
-              TextField(
-                controller: _timeController,
-                decoration: InputDecoration(labelText: 'Time (e.g., 10:00am)'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (_dateController.text.isNotEmpty &&
-                  _titleController.text.isNotEmpty &&
-                  _subtitleController.text.isNotEmpty &&
-                  _timeController.text.isNotEmpty) {
-                setState(() {
-                  tabData[0]?.add(
-                    ReminderItem(
-                      date: _dateController.text,
-                      title: _titleController.text,
-                      subtitle: _subtitleController.text,
-                      time: _timeController.text,
-                    ),
-                  );
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: Text("Add"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _deleteReminder(int index) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text("Delete Reminder"),
-        content: Text("Do you want to delete this reminder?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                tabData[selectedTabIndex]!.removeAt(index);
-              });
-              Navigator.pop(context);
-            },
-            child: Text("Delete"),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-class ReminderItem {
-  final String date;
-  final String title;
-  final String subtitle;
-  final String time;
-
-  ReminderItem({
-    required this.date,
-    required this.title,
-    required this.subtitle,
-    required this.time,
-  });
-}
